@@ -57,3 +57,10 @@ Get compartment OCID and create bucket
 
     ~>backup=$(oci iam compartment list --all | jq -r '.data | .[] | select(.name=="backup") | .id')
     ~>oci os bucket create --name "backup_data" --compartment-id "${backup}"
+
+===
+WIP
+===
+
+* https://docs.python-guide.org/scenarios/crypto/
+* https://stackoverflow.com/questions/3431825/generating-an-md5-checksum-of-a-file
