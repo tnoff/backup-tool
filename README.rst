@@ -1,6 +1,12 @@
-#############################
+###########
+Backup Tool
+###########
+
+Tool to backup local data to OCI.
+
+=============================
 Steps to Setup Authentication
-#############################
+=============================
 
 Helpful pages:
 
@@ -33,3 +39,21 @@ Set up config in `~/.oci/config`
     region=us-ashburn-1
     tenancy=<tenancy-ocid>
     key_file=~/.oci/oci_api_key.pem
+
+
+==============================
+Setup Compartments and Buckets
+==============================
+
+Generate compartent for backup data
+
+.. code-block:: none
+
+    ~>oci iam compartment create -c "${TENANCY_OCID}" --name "backup" --description "Backup data"
+
+Get compartment OCID and create bucket
+
+.. code-block:: none
+
+    ~>backup=$(oci iam compartment list --all | jq -r '.data | .[] | select(.name=="backup") | .id')
+    ~>oci os bucket create --name "backup_data" --compartment-id "${backup}"
