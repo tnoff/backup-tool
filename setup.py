@@ -6,8 +6,9 @@ setuptools.setup(
     author='Tyler D. North',
     author_email='ty_north@yahoo.com',
     install_requires=[
-        'pyAesCrypt >= 0.4.2',
         'oci >= 2.2.0',
+        'pycrypto >= 2.6.1',
+        'SQLAlchemy >= 1.3.8',
     ],
     entry_points={
         'console_scripts' : [

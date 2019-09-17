@@ -32,8 +32,9 @@ class ObjectStorageClient():
                 return all_objects
 
     def object_put(self, namespace_name, bucket_name, object_name,
-                   file_name):
-        md5_sum = md5(file_name)
+                   file_name, md5_sum=None):
+        if md5_sum is None:
+            md5_sum = md5(file_name)
         with open(file_name, 'rb') as reader:
             response = self.object_storage_client.put_object(namespace_name,
                                                              bucket_name,
