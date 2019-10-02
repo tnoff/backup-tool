@@ -35,6 +35,15 @@ class MockObjectData():
         self.objects = objects
         self.next_start_with = start
 
+class MockDataStream():
+    def __init__(self, objects):
+        class Raw():
+            def __init__(self, objects):
+                self.objects = objects
+            def stream(self, *args, **kwargs):
+                return self.objects
+        self.raw = Raw(objects)
+
 
 class MockObjectResponse():
     def __init__(self, status_code, data=None, objects=None, start=None):
@@ -63,6 +72,9 @@ class MockOS():
             return MockObjectResponse(200, objects=[MockObjectOne()], start="bar.ods")
         else:
             return MockObjectResponse(200, objects=[MockObjectTwo()], start=None)
+
+    def get_object(self, namspeace_name, bucket_name, object_name, **kwargs):
+        return MockObjectResponse(200, data=MockDataStream([bytearray('foo', 'utf8')]))
 
     def put_object(self, namespace_name, bucket_name, object_name, put_object_body, **kwargs):
         return MockObjectResponse(200)
@@ -120,3 +132,17 @@ class TestOCI(unittest.TestCase):
                     client = ObjectStorageClient('fake config', 'fake section')
                     client.object_delete('fake namespace', 'fake bucket', 'fake object')
 
+    def test_object_get(self):
+        with mock.patch("oci.config.from_file") as mock_config:
+            mock_config.return_value = "mock config"
+            with mock.patch("oci.util.to_dict") as mock_to_dict:
+                mock_to_dict.side_effect = to_dict_mock
+                with mock.patch("oci.object_storage.ObjectStorageClient") as mock_os:
+                    mock_os.side_effect = MockOS
+                    client = ObjectStorageClient('fake config', 'fake section')
+                    with utils.temp_file() as temp_object:
+                        client.object_get('fake namespace', 'fake section', 'fake object', temp_object)
+
+                        with open(temp_object, 'rb') as reader:
+                            data = reader.read()
+                            self.assertEqual(data, b'foo')

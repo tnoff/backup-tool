@@ -1,4 +1,6 @@
 import logging
+from logging.handlers import RotatingFileHandler
+import os
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -30,7 +32,7 @@ def setup_logger(name, log_file_level, logging_file=None,
 
 class BackupClient():
     def __init__(self, database_file, crypto_key, oci_config_file, oci_config_section, oci_namespace, oci_bucket,
-                 logging_file=None):
+                 logging_file=None, relative_path=None):
 
         self.logger = setup_logger('backup_client', 10, logging_file=logging_file)
 
@@ -46,10 +48,67 @@ class BackupClient():
         self.db_session = sessionmaker(bind=engine)()
 
         self.crypto_key = crypto_key
+        self.relative_path = relative_path
 
         self.oci_namespace = oci_namespace
         self.oci_bucket = oci_bucket
         self.os_client = ObjectStorageClient(oci_config_file, oci_config_section)
+
+    def file_restore(self, local_file_id, ovewrite=False):
+        '''
+            Restore file from object storage
+        '''
+        self.logger.info("Restoring local file:%s", local_file_id)
+
+        local_file = self.db_session.query(BackupEntryLocalFile).get(local_file_id)
+        if not local_file:
+            self.logger.error("Unable to find local file:%s", local_file_id)
+            return None
+
+        if not local_file.backup_entry_id:
+            self.logger.error("No backup entry for local file:%s" % local_file_id)
+            return None
+
+        backup_entry = self.db_session.query(BackupEntry).get(local_file.backup_entry_id)
+
+        local_file_path = local_file.local_file_path
+        if self.relative_path:
+            local_file_path = os.path.join(self.relative_path, local_file_path)
+
+        if os.path.isfile(local_file_path):
+            local_file_md5 = utils.md5(local_file_path)
+            if local_file.local_md5_checksum == local_file_md5:
+                if not overwrite:
+                    self.logger.info("Local file md5 %s matches expected md5", local_file_md5)
+                    return True
+
+        # Write file to temp dir
+        with utils.temp_file() as encrypted_file:
+            self.logger.debug("Using file %s for download", encrypted_file)
+            self.os_client.object_get(self.oci_namespace, self.oci_bucket,
+                                      backup_entry.uploaded_file_path, encrypted_file)
+            self.logger.info("Download object %s to temp file %s", backup_entry.uploaded_file_path, encrypted_file)
+
+            # Check md5 matches expected
+            downloaded_md5 = utils.md5(encrypted_file)
+            if backup_entry.uploaded_md5_checksum != downloaded_md5:
+                self.logger.error("Downloaded file %s has unexpected md5 %s, expected %s",
+                                  encrypted_file, downloaded_md5, backup_entry.uploaded_md5_checksum)
+                return None
+            self.logger.debug("Decrypting file %s to file %s", encrypted_file, local_file_path)
+            dir_name, _file = os.path.splitext(local_file_path)
+            if not os.path.isdir(dir_name):
+                os.makedirs(dir_name)
+            crypto.decrypt_file(encrypted_file, local_file_path, self.crypto_key,
+                                backup_entry.uploaded_encryption_offset)
+
+            # Check md5 matches expected
+            local_file_md5 = utils.md5(local_file_path)
+            if local_file_md5 != local_file.local_md5_checksum:
+                self.logger.error("MD5 %s of decrypted file %s does not match expected %s",
+                                  local_file_md5, local_file_path, local_file.local_md5_checksum)
+        return True
+
 
     def file_backup(self, local_file, overwrite=True):
         '''
@@ -58,6 +117,13 @@ class BackupClient():
             local_file      :       Full path of local file
             overwrite       :       Upload new file is md5 is changed
         '''
+
+    def _file_backup(self, local_file, overwrite=True):
+        local_file = os.path.abspath(local_file)
+        if self.relative_path:
+            local_file_path = os.path.relpath(local_file, self.relative_path)
+        else:
+            local_file_path = local_file
         self.logger.info("Backing up local file:%s", local_file)
 
         # Keep boolean value to make sure we should upload new file
@@ -68,7 +134,7 @@ class BackupClient():
         self.logger.debug("Local file %s md5 sum:%s", local_file, local_file_md5)
 
         local_backup_file = self.db_session.query(BackupEntryLocalFile).\
-                filter(BackupEntryLocalFile.local_file_path == local_file).first()
+                filter(BackupEntryLocalFile.local_file_path == local_file_path).first()
         if local_backup_file:
             self.logger.debug("Found existing local file:%s", local_backup_file.id)
             if local_file_md5 == local_backup_file.local_md5_checksum:
@@ -89,7 +155,7 @@ class BackupClient():
         else:
             self.logger.debug("No existing local file found for path:%s", local_file)
             backup_file_args = {
-                'local_file_path': local_file,
+                'local_file_path': local_file_path,
                 'local_md5_checksum' : local_file_md5,
             }
 
@@ -150,6 +216,14 @@ class BackupClient():
                     self.db_session.commit()
                     self.logger.info("Updated local backup %s to match backup entry %s",
                                      local_backup_file.id, backup_entry.id)
+
+    def directory_backup(self, dir_path, overwrite=True):
+        # TODO add skip files
+        directory_path = os.path.abspath(dir_path)
+        for dir_name, _, file_list in os.walk(directory_path):
+            self.logger.info("Backing up directory %s", dir_name)
+            for file_name in file_list:
+                self._file_backup(os.path.join(dir_name, file_name), overwrite=overwrite)
 
     def file_list(self):
         local_files = []

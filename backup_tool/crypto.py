@@ -45,7 +45,9 @@ def decrypt_file(input_file, output_file, passphrase, offset):
                 decoded_chunk = cipher.decrypt(decoded_bit)
 
             # Assume this is final part
-            decoded_chunk = decoded_chunk[:-offset]
-            writer.write(decoded_chunk)
+            if offset:
+                decoded_chunk = decoded_chunk[:-offset]
+            if decoded_chunk != b'' and decoded_chunk is not None:
+                writer.write(decoded_chunk)
 
     return True

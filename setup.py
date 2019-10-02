@@ -13,6 +13,7 @@ setuptools.setup(
     entry_points={
         'console_scripts' : [
             'object-cli = backup_tool.cli.object:main',
+            'backup-tool = backup_tool.cli.client:main',
         ]
     },
     packages=setuptools.find_packages(exclude=['tests']),

@@ -62,5 +62,5 @@ Get compartment OCID and create bucket
 WIP
 ===
 
-* https://docs.python-guide.org/scenarios/crypto/
-* https://stackoverflow.com/questions/3431825/generating-an-md5-checksum-of-a-file
+* Traverse dirs
+* Skip files when doing dirs

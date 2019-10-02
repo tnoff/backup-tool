@@ -45,6 +45,16 @@ class ObjectStorageClient():
                 raise ObjectStorageException("Error uploading object:%s" % response.data)
         return None
 
+    def object_get(self, namespace_name, bucket_name, object_name, file_name, chunk_size=1024):
+        with open(file_name, 'wb') as writer:
+            response = self.object_storage_client.get_object(namespace_name,
+                                                             bucket_name,
+                                                             object_name)
+            if response.status != 200:
+                raise ObjectStorageException("Error downloading object:%s" % response.data)
+            for chunk in response.data.raw.stream(chunk_size, decode_content=True):
+                writer.write(chunk)
+
     def object_delete(self, namespace_name, bucket_name, object_name):
         response = self.object_storage_client.delete_object(namespace_name,
                                                             bucket_name,

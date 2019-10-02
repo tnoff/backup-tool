@@ -176,3 +176,5 @@ class TestClient(unittest.TestCase):
 
                             backup_list = client.backup_list()
                             self.assertEqual(len(backup_list), 1)
+
+    # TODO test file restore
