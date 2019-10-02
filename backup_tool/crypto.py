@@ -12,8 +12,6 @@ def read_in_chunks(file_name, chunk_size=16):
 
 def encrypt_file(input_file, output_file, passphrase):
     cipher = AES.new(passphrase, AES.MODE_ECB)
-    newline = bytearray()
-    newline.extend(map(ord, '\n'))
     offset = 0
     with open(output_file, 'wb') as writer:
         with open(input_file, 'rb') as reader:
@@ -28,23 +26,26 @@ def encrypt_file(input_file, output_file, passphrase):
                 encoded_bit = cipher.encrypt(chunk)
                 encoded_chunk = base64.b64encode(encoded_bit)
                 writer.write(encoded_chunk)
-                writer.write(newline)
     return offset
 
 def decrypt_file(input_file, output_file, passphrase, offset):
     cipher = AES.new(passphrase, AES.MODE_ECB)
-    # TODO probably expensive to read file twice here
-    num_lines = sum(1 for line in open(input_file))
     with open(output_file, 'wb') as writer:
         with open(input_file, 'rb') as reader:
-            for (count, line) in enumerate(reader.readlines()):
-                line = line.decode('utf-8')
-                decoded_bit = base64.b64decode(line)
-                decoded_chunk = cipher.decrypt(decoded_bit)
-                # If last line in file, is possible that offset
-                # was added, if so, remove offset here
-                if count == num_lines - 1:
-                    decoded_chunk = decoded_chunk[:-offset]
-                writer.write(decoded_chunk)
-    return True
 
+            decoded_chunk = None
+            decoded_bit = None
+            while True:
+                chunk = reader.read(24)
+                if not chunk:
+                    break
+                if decoded_chunk is not None:
+                    writer.write(decoded_chunk)
+                decoded_bit = base64.b64decode(chunk)
+                decoded_chunk = cipher.decrypt(decoded_bit)
+
+            # Assume this is final part
+            decoded_chunk = decoded_chunk[:-offset]
+            writer.write(decoded_chunk)
+
+    return True
