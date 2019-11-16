@@ -66,8 +66,9 @@ class BackupClient():
             existing_path = self.db_session.query(BackupEntry).\
                     filter(BackupEntry.uploaded_file_path == object_path).first()
             if not existing_path:
-                return existing_path
+                return object_path
             self.logger.warning("UUID %s already in use, generating another", object_path)
+
 
     def file_restore(self, local_file_id, ovewrite=False):
         '''
@@ -284,7 +285,7 @@ class BackupClient():
                     if re.match(skip_check, full_path):
                         self.logger.warn("Ignoring file %s since matches skip check %s", full_path, skip_check)
                         continue
-                self._file_backup(os.path.join(full_path,
+                self._file_backup(full_path,
                                   overwrite=overwrite,
                                   check_uploaded_md5=check_uploaded_md5)
 
