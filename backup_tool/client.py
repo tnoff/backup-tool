@@ -155,6 +155,8 @@ class BackupClient():
                 self.logger.debug("Existing local file has different md5 sum, updating")
                 if overwrite is True:
                     local_backup_file.local_md5_checksum = local_file_md5
+                    # Current file has no backup, so set this to null for now
+                    local_backup_file.backup_entry_id = None
                     self.db_session.commit()
                     self.logger.debug("Updated local file %s to checksum %s",
                                       local_backup_file.id, local_file_md5)
