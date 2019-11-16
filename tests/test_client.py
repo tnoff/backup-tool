@@ -178,3 +178,4 @@ class TestClient(unittest.TestCase):
                             self.assertEqual(len(backup_list), 1)
 
     # TODO test file restore
+    # TODO test file skip

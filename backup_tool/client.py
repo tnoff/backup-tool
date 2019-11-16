@@ -253,20 +253,38 @@ class BackupClient():
                     self.logger.info("Updated local backup %s to match backup entry %s",
                                      local_backup_file.id, backup_entry.id)
 
-    def directory_backup(self, dir_path, overwrite=True, check_uploaded_md5=False):
+    def directory_backup(self, dir_path, overwrite=True, check_uploaded_md5=False,
+                         skip_files=None):
         '''
             Backup all files in directory
 
             local_file          :       Full path of local file
             overwrite           :       Upload new file is md5 is changed
             check_uploaded_md5  :       Ensure any existing backup file matches expected encryption
+            skip_files          :       List of regexes to ignore for backup
         '''
-        # TODO add skip files
         directory_path = os.path.abspath(dir_path)
+
+        # Make sure skip files is a string type
+        if skip_files is None:
+            skip_files = []
+        elif isinstance(skip_files, str):
+            skip_files = [skip_files]
+
         for dir_name, _, file_list in os.walk(directory_path):
+            # Check if dir matches skip files
+            for skip_check in skip_files:
+                if re.match(skip_check, dir_name):
+                    self.logger.warn("Ignoring dir %s since matches skip check %s", dir_name, skip_check)
+                    continue
             self.logger.info("Backing up directory %s", dir_name)
             for file_name in file_list:
-                self._file_backup(os.path.join(dir_name, file_name),
+                full_path = os.path.join(dir_name, file_name)
+                for skip_check in skip_files:
+                    if re.match(skip_check, full_path):
+                        self.logger.warn("Ignoring file %s since matches skip check %s", full_path, skip_check)
+                        continue
+                self._file_backup(os.path.join(full_path,
                                   overwrite=overwrite,
                                   check_uploaded_md5=check_uploaded_md5)
 
