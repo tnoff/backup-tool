@@ -194,7 +194,7 @@ class BackupClient():
                     self.db_session.commit()
                 else:
                     # Else upload new file
-                    self.logger.info("Now encrypted upload matching file %s, uploading copy",
+                    self.logger.info("No encrypted upload matching file %s, uploading copy",
                                      local_file)
 
                     # Make sure object path does not exist already
