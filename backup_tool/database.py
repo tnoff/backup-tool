@@ -32,7 +32,7 @@ class BackupEntry(BASE):
     id = Column(Integer, primary_key=True)
 
     # File paths
-    uploaded_file_path = Column(String(1024), unique=True)
+    uploaded_file_path = Column(String(256), unique=True)
 
     # MD5 sums
     uploaded_md5_checksum = Column(String(32), unique=True)
