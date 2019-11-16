@@ -320,6 +320,22 @@ class BackupClient():
             local_files.append(local_file.as_dict())
         return local_files
 
+    def file_cleanup(self):
+        '''
+            Delete local files in database that are no longer present on file system
+        '''
+        for local_file in self.db_session.query(BackupEntryLocalFile).all():
+            local_file_path = local_file.local_file_path
+            if self.relative_path:
+                local_file_path = os.path.join(self.relative_path, local_file_path)
+            if not os.path.isfile(local_file_path):
+                self.logger.info("Local file %s path %s no longer present, removing from db", local_file.id, local_file_path)
+                self.db_session.query(BackupEntryLocalFile).filter_by(id=local_file.id).delete()
+                self.db_session.commit()
+            else:
+                self.logger.debug("Local file %s path %s exists, skipping", local_file.id, local_file_path)
+
+
     def backup_list(self):
         '''
             List all external backup database entries

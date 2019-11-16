@@ -83,6 +83,9 @@ def parse_args(args):
     # File duplicates
     file_duplicates = file_sub_parser.add_parser("duplicates", help="Find duplicate files")
 
+    # File cleanup
+    file_cleanup = file_sub_parser.add_parser("cleanup", help="Delete files from database no longer present on filesystem")
+
     # File backup
     file_backup = file_sub_parser.add_parser("backup", help="Backup file")
     file_backup.add_argument("local_file", help="Local file path")
