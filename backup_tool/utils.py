@@ -42,4 +42,5 @@ def md5(input_file):
                 # File is likely binary
                 hash_value.update(chunk)
     md5_value = codecs.encode(hash_value.digest(), 'base64')
-    return str(md5_value).rstrip("\\n'").lstrip("b'")
+    # This leaves "b'<hash> at beginning, so take out first two chars
+    return str(md5_value).rstrip("\\n'")[2:]
