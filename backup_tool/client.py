@@ -110,6 +110,14 @@ class BackupClient():
         return True
 
 
+    def file_md5(self, local_file):
+        '''
+            Get md5sum of local file
+
+            local_file      :       Full path of local file
+        '''
+        return utils.md5(local_file)
+
     def file_backup(self, local_file, overwrite=True):
         '''
             Backup file to object storage
@@ -117,6 +125,7 @@ class BackupClient():
             local_file      :       Full path of local file
             overwrite       :       Upload new file is md5 is changed
         '''
+        self._file_backup(local_file, overwrite=overwrite)
 
     def _file_backup(self, local_file, overwrite=True):
         local_file = os.path.abspath(local_file)

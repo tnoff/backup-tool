@@ -89,6 +89,10 @@ def parse_args(args):
     file_restore = file_sub_parser.add_parser("restore", help="Restore from backup file")
     file_restore.add_argument("local_file_id", help="Local file id")
 
+    # File md5
+    file_md5 = file_sub_parser.add_parser("md5", help="Get md5 sum of file, in base64 encoding")
+    file_md5.add_argument("local_file", help="Local file path")
+
     # Backup Arguments
     backup_sub_parser = backup_parser.add_subparsers(dest="command", description="Command")
 
