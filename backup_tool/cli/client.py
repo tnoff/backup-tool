@@ -83,7 +83,8 @@ def parse_args(args):
     # File backup
     file_backup = file_sub_parser.add_parser("backup", help="Backup file")
     file_backup.add_argument("local_file", help="Local file path")
-    file_backup.add_argument("--overwrite", action="store_true", help="Overwrite copy in database")
+    file_backup.add_argument("--overwrite", "-o", action="store_true", help="Overwrite copy in database")
+    file_backup.add_argument("--check-uploaded-md5", "-c", action="store_true", help="Check uploaded md5 matches expected")
 
     # File restore
     file_restore = file_sub_parser.add_parser("restore", help="Restore from backup file")
@@ -105,8 +106,8 @@ def parse_args(args):
     # Directory backup
     dir_backup = dir_sub_parser.add_parser("backup", help="Backup file")
     dir_backup.add_argument("dir_path", help="Directory local path")
-    dir_backup.add_argument("--overwrite", action="store_true", help="Overwrite copy in database")
-
+    dir_backup.add_argument("--overwrite", "-o", action="store_true", help="Overwrite copy in database")
+    dir_backup.add_argument("--check-uploaded-md5", "-c", action="store_true", help="Check uploaded md5 matches expected")
 
     # Final Steps
     parsed_args = vars(parser.parse_args(args))

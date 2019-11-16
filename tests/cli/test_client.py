@@ -121,3 +121,4 @@ class TestCLIObject(unittest.TestCase):
 
     # TODO test backup
     # TODO test settings file loads
+    # TODO check uploaded m5 checksum arg
