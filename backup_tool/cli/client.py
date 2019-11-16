@@ -80,6 +80,9 @@ def parse_args(args):
     # File List
     file_list = file_sub_parser.add_parser("list", help="List files")
 
+    # File duplicates
+    file_duplicates = file_sub_parser.add_parser("duplicates", help="Find duplicate files")
+
     # File backup
     file_backup = file_sub_parser.add_parser("backup", help="Backup file")
     file_backup.add_argument("local_file", help="Local file path")

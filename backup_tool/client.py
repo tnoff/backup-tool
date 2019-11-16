@@ -254,6 +254,28 @@ class BackupClient():
                     self.logger.info("Updated local backup %s to match backup entry %s",
                                      local_backup_file.id, backup_entry.id)
 
+    def file_duplicates(self):
+        '''
+            Find backup files with multiple local file definitions
+        '''
+        # Get dict of
+        # { backup_file_id : [<local file>, <local file>]
+        backup_file_duplicates = {}
+        for local_file in self.db_session.query(BackupEntryLocalFile).all():
+            local_file_dict = local_file.as_dict()
+            backup_file_id = local_file_dict.pop('backup_entry_id')
+            backup_file_duplicates.setdefault(backup_file_id, [])
+            backup_file_duplicates[backup_file_id].append(local_file_dict)
+
+        # Remove entries that don't have multiple entries
+        single_backups = []
+        for backup_id, file_list in backup_file_duplicates.items():
+            if len(file_list) < 2:
+                single_backups.append(backup_id)
+        for backup in single_backups:
+            backup_file_duplicates.pop(backup)
+        return backup_file_duplicates
+
     def directory_backup(self, dir_path, overwrite=True, check_uploaded_md5=False,
                          skip_files=None):
         '''
