@@ -87,6 +87,16 @@ class TestCLIObject(unittest.TestCase):
         self.assertEqual(args.pop('module'), "file")
         self.assertEqual(args.pop('command'), "list")
 
+    def test_file_md5(self):
+        with self.assertRaises(CLIException) as error:
+            parse_args(["file", "md5"])
+        self.assertEqual("the following arguments are required: local_file", str(error.exception))
+
+        args = parse_args(["file", "md5", "foo"])
+        self.assertEqual(args.pop('module'), "file")
+        self.assertEqual(args.pop('command'), "md5")
+        self.assertEqual(args['local_file'], "foo")
+
     def test_file_backup(self):
         with self.assertRaises(CLIException) as error:
             parse_args(["file", "backup"])
