@@ -108,6 +108,7 @@ def parse_args(args):
     dir_backup.add_argument("dir_path", help="Directory local path")
     dir_backup.add_argument("--overwrite", "-o", action="store_true", help="Overwrite copy in database")
     dir_backup.add_argument("--check-uploaded-md5", "-c", action="store_true", help="Check uploaded md5 matches expected")
+    dir_backup.add_argument("--skip-files", "-s", nargs="+", help="Skip files matching regexes")
 
     # Final Steps
     parsed_args = vars(parser.parse_args(args))
