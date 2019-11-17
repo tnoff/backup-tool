@@ -70,7 +70,7 @@ class BackupClient():
             self.logger.warning("UUID %s already in use, generating another", object_path)
 
 
-    def file_restore(self, local_file_id, ovewrite=False):
+    def file_restore(self, local_file_id, overwrite=False):
         '''
             Restore file from object storage
 
