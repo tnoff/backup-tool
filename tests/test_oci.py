@@ -146,3 +146,4 @@ class TestOCI(unittest.TestCase):
                         with open(temp_object, 'rb') as reader:
                             data = reader.read()
                             self.assertEqual(data, b'foo')
+    # TODO test multi part upload
