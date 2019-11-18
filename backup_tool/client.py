@@ -115,7 +115,7 @@ class BackupClient():
                                   encrypted_file, downloaded_md5, backup_entry.uploaded_md5_checksum)
                 return True
             self.logger.debug("Decrypting file %s to file %s", encrypted_file, local_file_path)
-            dir_name, _file = os.path.splitext(local_file_path)
+            dir_name = os.path.dirname(local_file_path)
             if not os.path.isdir(dir_name):
                 os.makedirs(dir_name)
             crypto.decrypt_file(encrypted_file, local_file_path, self.crypto_key,
