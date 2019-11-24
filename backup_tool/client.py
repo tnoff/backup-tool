@@ -307,10 +307,14 @@ class BackupClient():
 
         for dir_name, _, file_list in os.walk(directory_path):
             # Check if dir matches skip files
+            skip_dir = False
             for skip_check in skip_files:
                 if re.match(skip_check, dir_name):
                     self.logger.warning("Ignoring dir %s since matches skip check %s", dir_name, skip_check)
-                    continue
+                    skip_dir = True
+                    break
+            if skip_dir:
+                continue
             self.logger.info("Backing up directory %s", dir_name)
             for file_name in file_list:
                 full_path = os.path.join(dir_name, file_name)
