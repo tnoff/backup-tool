@@ -127,7 +127,7 @@ class BackupClient():
         '''
         return utils.md5(local_file)
 
-    def file_backup(self, local_file, overwrite=True, check_uploaded_md5=False):
+    def file_backup(self, local_file, overwrite=False, check_uploaded_md5=False):
         '''
             Backup file to object storage
 
@@ -218,7 +218,7 @@ class BackupClient():
                          local_backup_file.id, backup_entry.id)
         return True
 
-    def _file_backup(self, local_file, overwrite=True, check_uploaded_md5=False):
+    def _file_backup(self, local_file, overwrite=False, check_uploaded_md5=False):
         '''
             Backup file to object storage
 
@@ -287,7 +287,7 @@ class BackupClient():
             backup_file_duplicates.pop(backup)
         return backup_file_duplicates
 
-    def directory_backup(self, dir_path, overwrite=True, check_uploaded_md5=False,
+    def directory_backup(self, dir_path, overwrite=False, check_uploaded_md5=False,
                          skip_files=None):
         '''
             Backup all files in directory
