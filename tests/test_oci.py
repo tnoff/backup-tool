@@ -44,6 +44,9 @@ class MockDataStream():
                 return self.objects
         self.raw = Raw(objects)
 
+class MockCreateMultipartData():
+    def __init__(self, upload_id):
+        self.upload_id = upload_id
 
 class MockObjectResponse():
     def __init__(self, status_code, data=None, objects=None, start=None):
@@ -62,6 +65,12 @@ class MockOS404():
     def list_objects(self, namespace_name, bucket_name, **kwargs):
         return MockObjectResponse(404, data="Invalid response")
 
+class MockPartHeaders():
+    def __init__(self, etag):
+        self.status = 200
+        self.headers = {
+            'ETag' : etag,
+        }
 
 class MockOS():
     def __init__(self, _config):
@@ -73,6 +82,9 @@ class MockOS():
         else:
             return MockObjectResponse(200, objects=[MockObjectTwo()], start=None)
 
+    def create_multipart_upload(self, namespace_name, bucket_name, multipart_details):
+        return MockObjectResponse(200, data=MockCreateMultipartData(upload_id=1234))
+
     def get_object(self, namspeace_name, bucket_name, object_name, **kwargs):
         return MockObjectResponse(200, data=MockDataStream([bytearray('foo', 'utf8')]))
 
@@ -82,6 +94,12 @@ class MockOS():
     def delete_object(self, namespace_name, bucket_name, object_name, **kwargs):
         return MockObjectResponse(200)
 
+    def upload_part(self, namespace_name, bucket_name, object_name, upload_id,
+                    current_part, file_chunk, **kwargs):
+        return MockPartHeaders('abcdefgt')
+
+    def commit_multipart_upload(self, namepsace_name, bucket_name, object_name, upload_id, commit_details):
+        return MockPartHeaders('dofanoaefnoenf')
 
 class TestOCI(unittest.TestCase):
 
@@ -122,17 +140,7 @@ class TestOCI(unittest.TestCase):
                             w.write(utils.random_string(length=1024))
                         client.object_put('fake namespace', 'fake bucket', 'fake object', temp_object)
 
-    def test_object_delete(self):
-        with mock.patch("oci.config.from_file") as mock_config:
-            mock_config.return_value = "mock config"
-            with mock.patch("oci.util.to_dict") as mock_to_dict:
-                mock_to_dict.side_effect = to_dict_mock
-                with mock.patch("oci.object_storage.ObjectStorageClient") as mock_os:
-                    mock_os.side_effect = MockOS
-                    client = ObjectStorageClient('fake config', 'fake section')
-                    client.object_delete('fake namespace', 'fake bucket', 'fake object')
-
-    def test_object_get(self):
+    def test_object_multipart_upload(self):
         with mock.patch("oci.config.from_file") as mock_config:
             mock_config.return_value = "mock config"
             with mock.patch("oci.util.to_dict") as mock_to_dict:
@@ -141,9 +149,28 @@ class TestOCI(unittest.TestCase):
                     mock_os.side_effect = MockOS
                     client = ObjectStorageClient('fake config', 'fake section')
                     with utils.temp_file() as temp_object:
-                        client.object_get('fake namespace', 'fake section', 'fake object', temp_object)
+                        with open(temp_object, 'w') as w:
+                            w.write(utils.random_string(length=1024))
+                        client.object_put('fake namespace', 'fake bucket', 'fake object', temp_object,
+                                          force_multipart_upload=True, multipart_chunk_size=50)
 
-                        with open(temp_object, 'rb') as reader:
-                            data = reader.read()
-                            self.assertEqual(data, b'foo')
-    # TODO test multi part upload
+    def test_object_delete(self):
+        with mock.patch("oci.config.from_file") as mock_config:
+            mock_config.return_value = "mock config"
+            with mock.patch("oci.object_storage.ObjectStorageClient") as mock_os:
+                mock_os.side_effect = MockOS
+                client = ObjectStorageClient('fake config', 'fake section')
+                client.object_delete('fake namespace', 'fake bucket', 'fake object')
+
+    def test_object_get(self):
+        with mock.patch("oci.config.from_file") as mock_config:
+            mock_config.return_value = "mock config"
+            with mock.patch("oci.object_storage.ObjectStorageClient") as mock_os:
+                mock_os.side_effect = MockOS
+                client = ObjectStorageClient('fake config', 'fake section')
+                with utils.temp_file() as temp_object:
+                    client.object_get('fake namespace', 'fake section', 'fake object', temp_object)
+
+                    with open(temp_object, 'rb') as reader:
+                        data = reader.read()
+                        self.assertEqual(data, b'foo')

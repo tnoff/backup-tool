@@ -41,7 +41,7 @@ class ObjectStorageClient():
             if next_page is None:
                 return all_objects
 
-    def _multipart_upload(self, namespace_name, bucket_name, object_name, file_name):
+    def _multipart_upload(self, namespace_name, bucket_name, object_name, file_name, multipart_chunk_size):
         self.logger.debug("Starting multipart upload of file %s", file_name)
 
         # First create a multipart upload, save upload id
@@ -62,11 +62,11 @@ class ObjectStorageClient():
         upload_parts = []
         # Multipart uploads start at 1 for w/e reason
         current_part = 1
-        self.logger.debug("Opening file %s and uploading 128 MB chunks", file_name)
+        self.logger.debug("Opening file %s and uploading %s size chunks", multipart_chunk_size, file_name)
         with open(file_name, 'rb') as reader:
             while True:
                 self.logger.debug("Attempting to write chunk number %s of file %s", current_part, file_name)
-                chunk = reader.read(128 * (2 ** 20))
+                chunk = reader.read(multipart_chunk_size)
                 if not chunk:
                     break
 
@@ -79,7 +79,7 @@ class ObjectStorageClient():
                     self.logger.debug("Chunk file %s has md5 sum %s", chunk_file, chunk_md5)
 
                     # Now open chunk file and write part
-                    with open(chunk_file['file_name'], 'rb') as chunk_read:
+                    with open(chunk_file, 'rb') as chunk_read:
                         # Upload chunk with proper info
                         self.logger.debug("Uploading chunk %s to object storage", chunk_file)
                         response = self.object_storage_client.upload_part(namespace_name,
@@ -89,24 +89,27 @@ class ObjectStorageClient():
                                                                           current_part,
                                                                           chunk_read,
                                                                           content_md5=chunk_md5)
+                    if response.status != 200:
+                        raise ObjectStorageException("Error part upload:%s" % response.data)
                     # Save the partial commit info
                     part_details = CommitMultipartUploadPartDetails(part_num=current_part,
-                                                                    etag=response.headers['Etag'])
+                                                                    etag=response.headers['ETag'])
                     upload_parts.append(part_details)
-                    self.logger.debug("Chunk upload successful, part %s and etag %s", current_part, response.headers['Etag'])
+                    self.logger.debug("Chunk upload successful, part %s and etag %s", current_part, response.headers['ETag'])
                 # Make sure to iterate current part
                 current_part += 1
 
         self.logger.debug("All parts uploaded for file %s, commiting multi part upload", file_name)
         # Combine part uploads and commit
         commit_details = CommitMultipartUploadDetails(parts_to_commit=upload_parts)
-        self.object_storage_client.commit_multipart_upload(namespace_name, bucket_name, object_name,
-                                                           upload_id, commit_details)
-
+        response = self.object_storage_client.commit_multipart_upload(namespace_name, bucket_name, object_name,
+                                                                      upload_id, commit_details)
+        if response.status != 200:
+            raise ObjectStorageException("Error part multipart commit:%s" % response.data)
         return True
 
     def object_put(self, namespace_name, bucket_name, object_name,
-                   file_name, md5_sum=None):
+                   file_name, md5_sum=None, force_multipart_upload=False, multipart_chunk_size=128 * (2 ** 20)):
         self.logger.info("Starting upload of file %s to namespace %s bucket %s and object name %s",
                          file_name, namespace_name, bucket_name, object_name)
         # Multipart upload caps out at 1000 parts, which in the current 128 MB chunks maxes out at 125 GB
@@ -115,8 +118,8 @@ class ObjectStorageClient():
             raise ObjectStorageException("File size too big for this client to upload")
 
         # Get size of file, if greater than 128 MB, use multipart uploads
-        if (os.path.getsize(file_name) / (2 ** 20)) > 128:
-            self._multipart_upload(namespace_name, bucket_name, object_name, file_name)
+        if (os.path.getsize(file_name) / (2 ** 20)) > 128 or force_multipart_upload:
+            self._multipart_upload(namespace_name, bucket_name, object_name, file_name, multipart_chunk_size)
         else:
             if md5_sum is None:
                 self.logger.debug("No object md5 sum for file %s given, generating one now", file_name)
