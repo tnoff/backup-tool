@@ -22,7 +22,7 @@ class MockOSClient():
         return True
 
 class TestClient(unittest.TestCase):
-    def test_client_basic_upload(self):
+    def test_basic_upload(self):
         '''
             Upload a single file, amke sure there is one file listed, and one backup listed
         '''
@@ -42,7 +42,7 @@ class TestClient(unittest.TestCase):
                 backup_list = client.backup_list()
                 self.assertEqual(len(backup_list), 1)
 
-    def test_client_two_files_same_md5(self):
+    def test_two_files_same_md5(self):
         '''
             Upload two files with same content, make sure two files listed, but one backup
         '''
@@ -70,7 +70,7 @@ class TestClient(unittest.TestCase):
                 backup_list = client.backup_list()
                 self.assertEqual(len(backup_list), 1)
 
-    def test_client_overwrite_file(self):
+    def test_overwrite_file(self):
         '''
             Upload a file, then overwrite that file with new data and upload
             Make sure only one local file copy, but two uploaded files
@@ -96,7 +96,7 @@ class TestClient(unittest.TestCase):
                 backup_list = client.backup_list()
                 self.assertEqual(len(backup_list), 2)
 
-    def test_client_no_overwrite_file(self):
+    def test_no_overwrite_file(self):
         '''
             Upload a file, then overwrite that file with new data and upload
             With overwrite turned off, should only be one backup copy
@@ -122,5 +122,40 @@ class TestClient(unittest.TestCase):
                 backup_list = client.backup_list()
                 self.assertEqual(len(backup_list), 1)
 
-    # TODO test file restore
+    def test_file_restore(self):
+        '''
+            Upload a file, remove the local copy, attempt to download again
+        '''
+
+        random_data = utils.random_string()
+
+        class MockOSGet():
+            def __init__(self, *args, **kwargs):
+                pass
+            def object_put(self, *args, **kwargs):
+                return True
+            def object_get(self, _ns, _bn, _on, file_name, **kwargs):
+                with open(file_name, 'w') as writer:
+                    writer.write(random_data)
+                return True
+
+        with mock.patch("backup_tool.oci_client.ObjectStorageClient") as mock_os:
+            mock_os.side_effect = MockOSGet
+            with utils.temp_file(suffix='.sql') as temp_db:
+                client = BackupClient(temp_db, FAKE_CRYPTO_KEY, FAKE_CONFIG, FAKE_SECTION,
+                                      FAKE_NAMESPACE, FAKE_BUCKET)
+                with utils.temp_file() as temp_file:
+                    with open(temp_file, 'w') as writer:
+                        writer.write(random_data)
+                    client.file_backup(temp_file)
+
+                local_file = client.file_list()[0]
+
+                # Make sure file not there currently
+                self.assertFalse(os.path.isfile(local_file['local_file_path']))
+
+                # Attempt to download file again, will fail if md5 doesnt match
+                with utils.temp_file(name=local_file['local_file_path']) as temp_file:
+                    client.file_restore(local_file['id'])
+
     # TODO test file skip
