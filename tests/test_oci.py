@@ -10,7 +10,6 @@ def from_file_config_mock(config_file, config_section):
     return 'mock config'
 
 def to_dict_mock(object_data):
-    print("mocking object")
     return vars(object_data)
 
 
@@ -76,33 +75,31 @@ class MockOS():
     def __init__(self, _config):
         pass
 
-    def list_objects(self, namespace_name, bucket_name, **kwargs):
+    def list_objects(self, *args, **kwargs):
         if kwargs.get('start') is None:
             return MockObjectResponse(200, objects=[MockObjectOne()], start="bar.ods")
         else:
             return MockObjectResponse(200, objects=[MockObjectTwo()], start=None)
 
-    def create_multipart_upload(self, namespace_name, bucket_name, multipart_details):
+    def create_multipart_upload(self, *args, **kwargs):
         return MockObjectResponse(200, data=MockCreateMultipartData(upload_id=1234))
 
-    def get_object(self, namspeace_name, bucket_name, object_name, **kwargs):
+    def get_object(self, *args, **kwargs):
         return MockObjectResponse(200, data=MockDataStream([bytearray('foo', 'utf8')]))
 
-    def put_object(self, namespace_name, bucket_name, object_name, put_object_body, **kwargs):
+    def put_object(self, *args, **kwargs):
         return MockObjectResponse(200)
 
-    def delete_object(self, namespace_name, bucket_name, object_name, **kwargs):
+    def delete_object(self, *args, **kwargs):
         return MockObjectResponse(200)
 
-    def upload_part(self, namespace_name, bucket_name, object_name, upload_id,
-                    current_part, file_chunk, **kwargs):
+    def upload_part(self, *args, **kwargs):
         return MockPartHeaders('abcdefgt')
 
-    def commit_multipart_upload(self, namepsace_name, bucket_name, object_name, upload_id, commit_details):
+    def commit_multipart_upload(self, *args, **kwargs):
         return MockPartHeaders('dofanoaefnoenf')
 
 class TestOCI(unittest.TestCase):
-
     def test_object_list_404(self):
         with mock.patch("oci.config.from_file") as mock_config:
             mock_config.return_value = "mock config"
