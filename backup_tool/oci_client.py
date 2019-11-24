@@ -33,7 +33,7 @@ class ObjectStorageClient():
                 raise ObjectStorageException("Error list objects:%s" % str(error))
             if response.status != 200:
                 raise ObjectStorageException("Error list objects:%s" % response.data)
-            all_objects += [oci.util.to_dict(object) for object in response.data.objects]
+            all_objects += [oci.util.to_dict(obj) for obj in response.data.objects]
             next_page = response.data.next_start_with
             self.logger.debug("Retrieved list of up to %s objects, next page %s", page_limit, next_page)
             if next_page is None:
