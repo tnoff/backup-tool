@@ -167,7 +167,7 @@ class BackupClient():
 
     def _file_backup_upload(self, local_file, local_backup_file):
         with utils.temp_file() as crypto_file:
-            self.logger.debug("Creating encrypted file %s from file %s with md5",
+            self.logger.debug("Creating encrypted file %s from file %s",
                               crypto_file, local_file)
             offset = crypto.encrypt_file(local_file, crypto_file, self.crypto_key)
             self.logger.info("Created encrypted file %s from file %s with offset %s",
