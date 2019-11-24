@@ -1,6 +1,6 @@
-from Crypto.Cipher import AES
 import base64
 
+from Crypto.Cipher import AES
 
 # https://stackoverflow.com/questions/519633/lazy-method-for-reading-big-file-in-python
 def read_in_chunks(file_name, chunk_size=16):

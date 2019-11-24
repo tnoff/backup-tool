@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 from argparse import ArgumentParser
 import re
 
@@ -13,7 +11,7 @@ class CommonArgparse(ArgumentParser):
         If theres a cli arg that contains "invalid choice: '<whatever>' (choose from 'opt1', 'opt2')"
         Make sure the options are presented in alphabetical order
         '''
-        CHOICE_REGEX = ".* invalid choice: '[a-zA-Z]+' \(choose from (.*)\)"
+        CHOICE_REGEX = r".* invalid choice: '[a-zA-Z]+' \(choose from (.*)\)"
         result = re.match(CHOICE_REGEX, message)
         if result:
             options = result.group(1)
@@ -22,4 +20,3 @@ class CommonArgparse(ArgumentParser):
             sorted_output = ", ".join("'%s'" % opt for opt in options_list)
             message = message.replace(options, sorted_output)
         raise CLIException(message)
-

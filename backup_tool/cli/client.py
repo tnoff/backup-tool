@@ -2,7 +2,6 @@
 from configparser import NoSectionError, NoOptionError, SafeConfigParser
 import json
 import os
-import re
 import sys
 
 from backup_tool.exception import CLIException
@@ -53,15 +52,12 @@ def parse_args(args):
                         help="OCI Config File")
     parser.add_argument("-cs", "--config-stage",
                         help="OCI Config Stage")
-    
     parser.add_argument("-d", "--database-file",
                         help="Client sqlite database file")
     parser.add_argument("-l", "--log-file",
                         help="Logging file")
-    
     parser.add_argument("-k", "--crypto-key-file", help="Cryto key")
     parser.add_argument("-r", "--relative-path", help="Relative file path")
-    
     parser.add_argument("-n", "--namespace",
                         help="Object storage namespace")
     parser.add_argument("-b", "--bucket-name",
@@ -78,13 +74,14 @@ def parse_args(args):
     file_sub_parser = file_parser.add_subparsers(dest="command", description="Command")
 
     # File List
-    file_list = file_sub_parser.add_parser("list", help="List files")
+    file_sub_parser.add_parser("list", help="List files")
 
     # File duplicates
-    file_duplicates = file_sub_parser.add_parser("duplicates", help="Find duplicate files")
+    file_sub_parser.add_parser("duplicates", help="Find duplicate files")
 
     # File cleanup
     file_cleanup = file_sub_parser.add_parser("cleanup", help="Delete files from database no longer present on filesystem")
+    file_cleanup.add_argument("--dry-run", "-d", action="store_true", help="Do not delete files")
 
     # File backup
     file_backup = file_sub_parser.add_parser("backup", help="Backup file")
@@ -104,7 +101,7 @@ def parse_args(args):
     backup_sub_parser = backup_parser.add_subparsers(dest="command", description="Command")
 
     # Backup List
-    backup_list = backup_sub_parser.add_parser("list", help="List backups")
+    backup_sub_parser.add_parser("list", help="List backups")
 
     # Directory Arguments
     dir_sub_parser = dir_parser.add_subparsers(dest="command", description="Command")
@@ -137,7 +134,7 @@ def load_settings(settings_file):
         'log_file' : ['general', 'logging_file'],
         'crypto_key_file' : ['general', 'crypto_key_file'],
         'relative_path' : ['general', 'relative_path'],
-        'namespace' : ['object_storage', 'namespace'], 
+        'namespace' : ['object_storage', 'namespace'],
         'bucket_name' : ['object_storage', 'bucket_name'],
         'config_file' : ['oci', 'config_file'],
         'config_stage' : ['oci', 'config_stage'],
