@@ -338,7 +338,6 @@ class BackupClient():
     def file_cleanup(self, dry_run=False):
         '''
             Delete local files in database that are no longer present on file system
-
             dry_run     :       Return list of files, but do not execute deletes
         '''
 
@@ -367,3 +366,22 @@ class BackupClient():
         for backup_entry in self.db_session.query(BackupEntry).all():
             backup_files.append(backup_entry.as_dict())
         return backup_files
+
+    def backup_cleanup(self, dry_run=False):
+        '''
+            Find backup entries that do not have a local file entry, and delete these backups
+            dry_run     :   Return list of files, but do not delete
+        '''
+        backup_entry_ids = [item[0] for item in self.db_session.query(BackupEntry.id)]
+        local_file_backups = [item[0] for item in self.db_session.query(BackupEntryLocalFile.backup_entry_id).distinct()]
+
+        extra_backup_entries = list(set(backup_entry_ids) - set(local_file_backups))
+
+        self.logger.info("Found backup file entries %s that do not have local files", extra_backup_entries)
+
+        for backup in self.db_session.query(BackupEntry).filter(BackupEntry.id.in_(extra_backup_entries)):
+            if not dry_run:
+                self.os_client.object_delete(self.oci_namespace, self.oci_bucket, backup.uploaded_file_path)
+                self.db_session.query(BackupEntry).filter_by(id=backup.id).delete()
+                self.db_session.commit()
+        return extra_backup_entries

@@ -155,6 +155,6 @@ class ObjectStorageClient():
         response = self.object_storage_client.delete_object(namespace_name,
                                                             bucket_name,
                                                             object_name)
-        if response.status != 200:
-            raise ObjectStorageException("Error deleting object:%s" % response.data)
+        if response.status != 204:
+            raise ObjectStorageException("Error deleting object:%s" % response.status)
         return True

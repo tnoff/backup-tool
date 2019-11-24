@@ -159,3 +159,4 @@ class TestClient(unittest.TestCase):
                     client.file_restore(local_file['id'])
 
     # TODO test file skip
+    # TODO test file cleanup

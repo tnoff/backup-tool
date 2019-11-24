@@ -103,6 +103,10 @@ def parse_args(args):
     # Backup List
     backup_sub_parser.add_parser("list", help="List backups")
 
+    # Backup cleanup
+    backup_cleanup = backup_sub_parser.add_parser("cleanup", help="Delete backups from database and object storage that dont have local files")
+    backup_cleanup.add_argument("--dry-run", "-d", action="store_true", help="Do not delete these backups")
+
     # Directory Arguments
     dir_sub_parser = dir_parser.add_subparsers(dest="command", description="Command")
 
