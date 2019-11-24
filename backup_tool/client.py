@@ -12,31 +12,11 @@ from backup_tool.database import BASE, BackupEntry, BackupEntryLocalFile
 from backup_tool.oci_client import ObjectStorageClient
 from backup_tool import utils
 
-def setup_logger(name, log_file_level, logging_file=None,
-                 console_logging=True, console_logging_level=logging.INFO):
-    logger = logging.getLogger(name)
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s',
-                                  datefmt='%Y-%m-%d %H:%M:%S')
-    logger.setLevel(log_file_level)
-    if logging_file is not None:
-        fh = RotatingFileHandler(logging_file,
-                                 backupCount=4,
-                                 maxBytes=((2 ** 20) * 10))
-        fh.setLevel(log_file_level)
-        fh.setFormatter(formatter)
-        logger.addHandler(fh)
-    if console_logging:
-        sh = logging.StreamHandler()
-        sh.setLevel(console_logging_level)
-        sh.setFormatter(formatter)
-        logger.addHandler(sh)
-    return logger
-
 class BackupClient():
     def __init__(self, database_file, crypto_key, oci_config_file, oci_config_section, oci_namespace, oci_bucket,
                  logging_file=None, relative_path=None):
 
-        self.logger = setup_logger('backup_client', 10, logging_file=logging_file)
+        self.logger = utils.setup_logger('backup_client', 10, logging_file=logging_file)
 
         if database_file is None:
             engine = create_engine('sqlite:///', encoding='utf-8')
@@ -54,7 +34,7 @@ class BackupClient():
 
         self.oci_namespace = oci_namespace
         self.oci_bucket = oci_bucket
-        self.os_client = ObjectStorageClient(oci_config_file, oci_config_section)
+        self.os_client = ObjectStorageClient(oci_config_file, oci_config_section, logger=self.logger)
 
     def _generate_uuid(self):
         '''

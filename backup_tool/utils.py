@@ -1,6 +1,8 @@
 import codecs
 from contextlib import contextmanager
 import hashlib
+import logging
+from logging.handlers import RotatingFileHandler
 import os
 import random
 import string
@@ -44,3 +46,23 @@ def md5(input_file):
     md5_value = codecs.encode(hash_value.digest(), 'base64')
     # This leaves "b'<hash> at beginning, so take out first two chars
     return str(md5_value).rstrip("\\n'")[2:]
+
+def setup_logger(name, log_file_level, logging_file=None,
+                 console_logging=True, console_logging_level=logging.INFO):
+    logger = logging.getLogger(name)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s',
+                                  datefmt='%Y-%m-%d %H:%M:%S')
+    logger.setLevel(log_file_level)
+    if logging_file is not None:
+        fh = RotatingFileHandler(logging_file,
+                                 backupCount=4,
+                                 maxBytes=((2 ** 20) * 10))
+        fh.setLevel(log_file_level)
+        fh.setFormatter(formatter)
+        logger.addHandler(fh)
+    if console_logging:
+        sh = logging.StreamHandler()
+        sh.setLevel(console_logging_level)
+        sh.setFormatter(formatter)
+        logger.addHandler(sh)
+    return logger
