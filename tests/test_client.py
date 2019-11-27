@@ -41,8 +41,10 @@ class TestClient(unittest.TestCase):
                 self.assertEqual(len(file_list), 1)
                 backup_list = client.backup_list()
                 self.assertEqual(len(backup_list), 1)
+                # Files should have diff md5s
+                self.assertNotEqual(file_list[0]['local_md5_checksum'], backup_list[0]['uploaded_md5_checksum'])
 
-    def test_two_files_same_md5(self):
+    def test_file_backup_same_md5s(self):
         '''
             Upload two files with same content, make sure two files listed, but one backup
         '''
@@ -66,11 +68,12 @@ class TestClient(unittest.TestCase):
                 # Should be one backup file with one local file
                 file_list = client.file_list()
                 self.assertEqual(len(file_list), 2)
+                self.assertEqual(file_list[0]['local_md5_checksum'], file_list[1]['local_md5_checksum'])
 
                 backup_list = client.backup_list()
                 self.assertEqual(len(backup_list), 1)
 
-    def test_overwrite_file(self):
+    def test_file_backup_overwrite(self):
         '''
             Upload a file, then overwrite that file with new data and upload
             Make sure only one local file copy, but two uploaded files
@@ -96,7 +99,10 @@ class TestClient(unittest.TestCase):
                 backup_list = client.backup_list()
                 self.assertEqual(len(backup_list), 2)
 
-    def test_no_overwrite_file(self):
+                # Should be diff md5s
+                self.assertNotEqual(backup_list[0]['uploaded_md5_checksum'], backup_list[1]['uploaded_md5_checksum'])
+
+    def test_file_backup_no_overwrite(self):
         '''
             Upload a file, then overwrite that file with new data and upload
             With overwrite turned off, should only be one backup copy
