@@ -162,7 +162,7 @@ class TestOCI(unittest.TestCase):
                 pass
 
             def delete_object(self, *args, **kwargs):
-                return MockObjectResponse(200)
+                return MockObjectResponse(204)
 
         with mock.patch("oci.object_storage.ObjectStorageClient") as mock_os:
             mock_os.side_effect = MockOSDelete
