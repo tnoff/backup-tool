@@ -97,6 +97,21 @@ class TestCLIObject(unittest.TestCase):
         self.assertEqual(args.pop('command'), "md5")
         self.assertEqual(args['local_file'], "foo")
 
+    def test_file_encrypt(self):
+        with self.assertRaises(CLIException) as error:
+            parse_args(["file", "encrypt"])
+        self.assertEqual("the following arguments are required: local_input_file, local_output_file",
+                         str(error.exception))
+        with self.assertRaises(CLIException) as error:
+            parse_args(["file", "encrypt", "foo"])
+        self.assertEqual("the following arguments are required: local_output_file", str(error.exception))
+
+        args = parse_args(["file", "encrypt", "foo", "bar"])
+        self.assertEqual(args.pop('module'), "file")
+        self.assertEqual(args.pop('command'), "encrypt")
+        self.assertEqual(args['local_input_file'], "foo")
+        self.assertEqual(args['local_output_file'], "bar")
+
     def test_file_backup(self):
         with self.assertRaises(CLIException) as error:
             parse_args(["file", "backup"])

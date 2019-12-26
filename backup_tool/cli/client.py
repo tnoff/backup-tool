@@ -97,6 +97,17 @@ def parse_args(args):
     file_md5 = file_sub_parser.add_parser("md5", help="Get md5 sum of file, in base64 encoding")
     file_md5.add_argument("local_file", help="Local file path")
 
+    # File encrypt
+    file_encrypt = file_sub_parser.add_parser("encrypt", help="Encrypt local file, but do not upload")
+    file_encrypt.add_argument("local_input_file", help="Local input file")
+    file_encrypt.add_argument("local_output_file", help="Local output file")
+
+    # File decrypt
+    file_decrypt = file_sub_parser.add_parser("decrypt", help="Decrypt local file")
+    file_decrypt.add_argument("local_input_file", help="Local input file")
+    file_decrypt.add_argument("local_output_file", help="Local output file")
+    file_decrypt.add_argument("offset", type=int, help="Offset of decryption")
+
     # Backup Arguments
     backup_sub_parser = backup_parser.add_subparsers(dest="command", description="Command")
 

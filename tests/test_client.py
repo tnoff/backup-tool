@@ -158,5 +158,48 @@ class TestClient(unittest.TestCase):
                 with utils.temp_file(name=local_file['local_file_path']) as temp_file:
                     client.file_restore(local_file['id'])
 
+    def test_file_encrypt_decrypt(self):
+        class MockOS():
+            def __init__(self, *args, **kwargs):
+                pass
+        with utils.temp_file(suffix='.sql') as temp_db:
+            with mock.patch("backup_tool.oci_client.ObjectStorageClient") as mock_os:
+                mock_os.side_effect = MockOS
+                with utils.temp_file() as temp_file_input:
+                    # Write some dummy data to file
+                    with open(temp_file_input, 'w') as writer:
+                        writer.write('1234567890123456')
+                    with utils.temp_file() as temp_file_output:
+                        client = BackupClient(temp_db, FAKE_CRYPTO_KEY, FAKE_CONFIG, FAKE_SECTION,
+                                              FAKE_NAMESPACE, FAKE_BUCKET)
+
+                        offset = client.file_encrypt(temp_file_input, temp_file_output)
+                        self.assertEqual(offset, 0)
+
+                        with open(temp_file_output, 'r') as reader:
+                            read_data = reader.read()
+                        self.assertEqual(read_data, 'dXzNDNxckOrb7uz2ON0AAA==')
+
+    def test_file_encrypt_decrypt(self):
+        class MockOS():
+            def __init__(self, *args, **kwargs):
+                pass
+        with utils.temp_file(suffix='.sql') as temp_db:
+            with mock.patch("backup_tool.oci_client.ObjectStorageClient") as mock_os:
+                mock_os.side_effect = MockOS
+                with utils.temp_file() as temp_file_input:
+                    # Write some dummy data to file
+                    with open(temp_file_input, 'w') as writer:
+                        writer.write('dXzNDNxckOrb7uz2ON0AAA==')
+                    with utils.temp_file() as temp_file_output:
+                        client = BackupClient(temp_db, FAKE_CRYPTO_KEY, FAKE_CONFIG, FAKE_SECTION,
+                                              FAKE_NAMESPACE, FAKE_BUCKET)
+
+                        client.file_decrypt(temp_file_input, temp_file_output, 0)
+
+                        with open(temp_file_output, 'r') as reader:
+                            read_data = reader.read()
+                        self.assertEqual(read_data, '1234567890123456')
+
     # TODO test file skip
     # TODO test file cleanup

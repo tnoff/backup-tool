@@ -36,7 +36,7 @@ class BackupClient():
 
     def _generate_uuid(self):
         '''
-            Generate a uuid that is not already in use
+        Generate a uuid that is not already in use
         '''
         # Make sure object path does not exist already
         while True:
@@ -51,10 +51,10 @@ class BackupClient():
 
     def file_restore(self, local_file_id, overwrite=False):
         '''
-            Restore file from object storage
+        Restore file from object storage
 
-            local_file_id   :   ID of local file database entry to restore locally
-            overwrite       :   Overwrite local file if md5 does not match
+        local_file_id   :   ID of local file database entry to restore locally
+        overwrite       :   Overwrite local file if md5 does not match
         '''
         self.logger.info("Restoring local file:%s", local_file_id)
 
@@ -121,25 +121,49 @@ class BackupClient():
 
     def file_md5(self, local_file):
         '''
-            Get md5sum of local file
+        Get md5sum of local file
 
-            local_file      :       Full path of local file
+        local_file      :       Full path of local file
         '''
         return utils.md5(local_file)
 
+    def file_encrypt(self, local_input_file, local_output_file):
+        '''
+        Encrypt local file, but no dot upload
+
+        local_input_file    :   Full path of local input file
+        local_ouput_file    :   Full path of local ouptut file
+        '''
+        offset = crypto.encrypt_file(local_input_file, local_output_file, self.crypto_key)
+        self.logger.info("Encrypted local file %s to output file %s with offset %s",
+                         local_input_file, local_output_file, offset)
+        return offset
+
+    def file_decrypt(self, local_input_file, local_output_file, offset):
+        '''
+        Decrypt local file
+
+        local_input_file    :   Full path of local input file
+        local_ouput_file    :   Full path of local ouptut file
+        offset              :   Offset number to use in decryption
+        '''
+        crypto.decrypt_file(local_input_file, local_output_file, self.crypto_key, offset)
+        self.logger.info("Derypted local file %s to output file %s", local_input_file, local_output_file)
+        return True
+
     def file_backup(self, local_file, overwrite=False, check_uploaded_md5=False):
         '''
-            Backup file to object storage
+        Backup file to object storage
 
-            local_file          :       Full path of local file
-            overwrite           :       Upload new file is md5 is changed
-            check_uploaded_md5  :       Ensure any existing backup file matches expected encryption
+        local_file          :       Full path of local file
+        overwrite           :       Upload new file is md5 is changed
+        check_uploaded_md5  :       Ensure any existing backup file matches expected encryption
         '''
         self._file_backup(local_file, overwrite=overwrite, check_uploaded_md5=check_uploaded_md5)
 
     def _file_backup_file_exists(self, local_backup_file, local_file, local_file_md5, overwrite, check_uploaded_md5):
         '''
-            Local backup of file exists
+        Local backup of file exists
         '''
         # Keep boolean value to make sure we should upload new file
         upload_file = True
@@ -220,11 +244,11 @@ class BackupClient():
 
     def _file_backup(self, local_file, overwrite=False, check_uploaded_md5=False):
         '''
-            Backup file to object storage
+        Backup file to object storage
 
-            local_file          :       Full path of local file
-            overwrite           :       Upload new file is md5 is changed
-            check_uploaded_md5  :       Ensure any existing backup file matches expected encryption
+        local_file          :       Full path of local file
+        overwrite           :       Upload new file is md5 is changed
+        check_uploaded_md5  :       Ensure any existing backup file matches expected encryption
         '''
         # Use local file as the full path of the file
         # Use local file path as relative path for the database
@@ -267,7 +291,7 @@ class BackupClient():
 
     def file_duplicates(self):
         '''
-            Find backup files with multiple local file definitions
+        Find backup files with multiple local file definitions
         '''
         # Get dict of
         # { backup_file_id : [<local file>, <local file>]
@@ -332,7 +356,7 @@ class BackupClient():
 
     def file_list(self):
         '''
-            List all local file database entries
+        List all local file database entries
         '''
         local_files = []
         for local_file in self.db_session.query(BackupEntryLocalFile).all():
@@ -341,8 +365,8 @@ class BackupClient():
 
     def file_cleanup(self, dry_run=False):
         '''
-            Delete local files in database that are no longer present on file system
-            dry_run     :       Return list of files, but do not execute deletes
+        Delete local files in database that are no longer present on file system
+        dry_run     :       Return list of files, but do not execute deletes
         '''
 
         files_cleaned = []
@@ -364,7 +388,7 @@ class BackupClient():
 
     def backup_list(self):
         '''
-            List all external backup database entries
+        List all external backup database entries
         '''
         backup_files = []
         for backup_entry in self.db_session.query(BackupEntry).all():
@@ -373,8 +397,8 @@ class BackupClient():
 
     def backup_cleanup(self, dry_run=False):
         '''
-            Find backup entries that do not have a local file entry, and delete these backups
-            dry_run     :   Return list of files, but do not delete
+        Find backup entries that do not have a local file entry, and delete these backups
+        dry_run     :   Return list of files, but do not delete
         '''
         backup_entry_ids = [item[0] for item in self.db_session.query(BackupEntry.id)]
         local_file_backups = [item[0] for item in self.db_session.query(BackupEntryLocalFile.backup_entry_id).distinct()]
