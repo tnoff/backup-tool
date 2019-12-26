@@ -21,6 +21,9 @@ class MockOSClient():
     def object_put(self, *args, **kwargs):
         return True
 
+    def object_delete(self, *args, **kwargs):
+        return True
+
 class TestClient(unittest.TestCase):
     def test_basic_upload(self):
         '''
@@ -164,7 +167,7 @@ class TestClient(unittest.TestCase):
                 with utils.temp_file(name=local_file['local_file_path']) as temp_file:
                     client.file_restore(local_file['id'])
 
-    def test_file_encrypt_decrypt(self):
+    def test_file_encrypt(self):
         class MockOS():
             def __init__(self, *args, **kwargs):
                 pass
@@ -186,13 +189,10 @@ class TestClient(unittest.TestCase):
                             read_data = reader.read()
                         self.assertEqual(read_data, 'dXzNDNxckOrb7uz2ON0AAA==')
 
-    def test_file_encrypt_decrypt(self):
-        class MockOS():
-            def __init__(self, *args, **kwargs):
-                pass
+    def test_file_decrypt(self):
         with utils.temp_file(suffix='.sql') as temp_db:
             with mock.patch("backup_tool.oci_client.ObjectStorageClient") as mock_os:
-                mock_os.side_effect = MockOS
+                mock_os.side_effect = MockOSClient
                 with utils.temp_file() as temp_file_input:
                     # Write some dummy data to file
                     with open(temp_file_input, 'w') as writer:
@@ -207,5 +207,88 @@ class TestClient(unittest.TestCase):
                             read_data = reader.read()
                         self.assertEqual(read_data, '1234567890123456')
 
+    def test_file_cleanup(self):
+        with mock.patch("backup_tool.oci_client.ObjectStorageClient") as mock_os:
+            mock_os.side_effect = MockOSClient
+            with utils.temp_file(suffix='.sql') as temp_db:
+                client = BackupClient(temp_db, FAKE_CRYPTO_KEY, FAKE_CONFIG, FAKE_SECTION,
+                                      FAKE_NAMESPACE, FAKE_BUCKET)
+                # First upload temp file
+                with utils.temp_file() as temp_file:
+                    with open(temp_file, 'w') as writer:
+                        writer.write(utils.random_string(length=20))
+                    client.file_backup(temp_file)
+
+                # Now run file cleanup since temp file is deleted
+                client.file_cleanup()
+
+                # Test file list is empty
+                file_list = client.file_list()
+                self.assertEqual(len(file_list), 0)
+
+                # Test backup file still exists
+                backup_list = client.backup_list()
+                self.assertEqual(len(backup_list), 1)
+
+    def test_backup_cleanup(self):
+        with mock.patch("backup_tool.oci_client.ObjectStorageClient") as mock_os:
+            mock_os.side_effect = MockOSClient
+            with utils.temp_file(suffix='.sql') as temp_db:
+                client = BackupClient(temp_db, FAKE_CRYPTO_KEY, FAKE_CONFIG, FAKE_SECTION,
+                                      FAKE_NAMESPACE, FAKE_BUCKET)
+                # First upload temp file
+                with utils.temp_file() as temp_file:
+                    with open(temp_file, 'w') as writer:
+                        writer.write(utils.random_string(length=20))
+                    client.file_backup(temp_file)
+
+                # Now run file cleanup since temp file is deleted
+                client.file_cleanup()
+
+                # Make sure backup list not empty
+                backup_list = client.backup_list()
+                self.assertEqual(len(backup_list), 1)
+
+                # Now run backup cleanup
+                client.backup_cleanup()
+
+                # Make sure backup list is empty
+                backup_list = client.backup_list()
+                self.assertEqual(len(backup_list), 0)
+
+
+    def test_file_duplicates(self):
+        with mock.patch("backup_tool.oci_client.ObjectStorageClient") as mock_os:
+            mock_os.side_effect = MockOSClient
+            with utils.temp_file(suffix='.sql') as temp_db:
+                client = BackupClient(temp_db, FAKE_CRYPTO_KEY, FAKE_CONFIG, FAKE_SECTION,
+                                      FAKE_NAMESPACE, FAKE_BUCKET)
+                # First upload temp file
+                with utils.temp_file() as temp_file:
+                    with open(temp_file, 'w') as writer:
+                        writer.write('abc')
+                    client.file_backup(temp_file)
+
+                # Upload temp file of same data
+                with utils.temp_file() as temp_file:
+                    with open(temp_file, 'w') as writer:
+                        writer.write('abc')
+                    client.file_backup(temp_file)
+
+
+                # Make sure there are two files, but one backup
+                file_list = client.file_list()
+                self.assertEqual(len(file_list), 2)
+
+                backup_list = client.backup_list()
+                self.assertEqual(len(backup_list), 1)
+
+                # Now test duplicates
+                duplicates = client.file_duplicates()
+                # Make sure there is one key with a list of 2 items
+                keys = list(duplicates.keys())
+                self.assertEqual(len(keys), 1)
+
+                self.assertEqual(len(duplicates[keys[0]]), 2)
+
     # TODO test file skip
-    # TODO test file cleanup

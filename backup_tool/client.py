@@ -119,7 +119,7 @@ class BackupClient():
         return True
 
 
-    def file_md5(self, local_file):
+    def file_md5(self, local_file): #pylint: disable=no-self-use
         '''
         Get md5sum of local file
 
