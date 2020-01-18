@@ -49,12 +49,13 @@ class BackupClient():
             self.logger.warning("UUID %s already in use, generating another", object_path)
 
 
-    def file_restore(self, local_file_id, overwrite=False):
+    def file_restore(self, local_file_id, overwrite=False, set_restore=False):
         '''
         Restore file from object storage
 
         local_file_id   :   ID of local file database entry to restore locally
         overwrite       :   Overwrite local file if md5 does not match
+        set_restore     :   If object is archived, attempt to restore
         '''
         self.logger.info("Restoring local file:%s", local_file_id)
 
@@ -89,7 +90,7 @@ class BackupClient():
         with utils.temp_file() as encrypted_file:
             self.logger.info("Downloading object %s to temp file %s", backup_entry.uploaded_file_path, encrypted_file)
             self.os_client.object_get(self.oci_namespace, self.oci_bucket,
-                                      backup_entry.uploaded_file_path, encrypted_file)
+                                      backup_entry.uploaded_file_path, encrypted_file, set_restore=set_restore)
             self.logger.info("Downloaded of object %s complete, written to temp file %s", backup_entry.uploaded_file_path, encrypted_file)
 
             # Check md5 matches expected

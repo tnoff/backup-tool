@@ -17,5 +17,5 @@ setuptools.setup(
         ]
     },
     packages=setuptools.find_packages(exclude=['tests']),
-    version='0.0.12',
+    version='0.0.13',
 )
