@@ -8,9 +8,9 @@ Encrypt and backup local files to Oracle Cloud Intrastructure ( OCI ) Object Sto
 Overview
 ========
 
-For each file specified, the backup tool will first calculate the md5 of the file, encrypt that file while also saving the md5 of the encrypted file, then upload the encrypted file to OCI Object Storage.
+For each file specified, the backup tool will first calculate the md5 of the file, encrypt that file while also saving the md5 of the encrypted file, and then upload the encrypted file to OCI Object Storage.
 
-The tool can also restore files from OCI Object storage, by first downloaded the encrypted file and then decrypting it.
+The tool can also restore these files from OCI Object storage, by first downloaded the encrypted file and then decrypting it.
 
 -----------------
 Encryption Method
