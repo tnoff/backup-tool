@@ -2,13 +2,41 @@
 Backup Tool
 ###########
 
-Tool to backup local data to OCI.
+Backup local files to Oracle Cloud Intrastructure ( OCI ). The tool will encrypt local files and back them up to OCI Object Storage. 
 
-The client will create local entries in a database, that will match to each unique file path. The client will track the files md5 sum as well.
+========
+Overview
+========
 
-For each unique local file md5, the client will upload an encrypted copy of that file to object storage. Note that if multiple files share the same md5, it will only upload that file once.
+For each file specified, the backup tool will first calculate the md5 of the file, encrypt that file while also saving the md5 of the encrypted file, then upload the encrypted file to OCI Object Storage.
 
-If requested, the client can restore files from object storage, by first downloading them to a temporary file, and then decrypting them.
+The tool can also restore files from OCI Object storage, by first downloaded the encrypted file and then decrypting it.
+
+-----------------
+Encryption Method
+-----------------
+
+The tool uses a very basic AES encryption method that uses a single password (crypto key )to encrypt and decrypt files.
+
+The tool will read a file in 16-byte intervals, and encrypt this into a 24-byte hash using the password specified.
+
+If the last interval read from a file is not exactly 16-bytes, an "offset" of 0's will be added to the end of the interval before encryption. This offset is returned by the encryption method, and saved in the database for decryption. Decrypting a file will require specifying the offset for the file.
+
+--------
+MD5 sums
+--------
+
+MD5 sums are calculated throughout the process to ensure data integrity. The md5 sum of each local file path is saved in the database, to ensure the file is not backed up mutliple times, as well as to ensure the tool can recognize the file has been modified. The `--overwrite` flag can be used to ensure that updates to local files are backed up.
+
+The md5 of the corresponding encrypted file is also cacluated and saved in the database. When encrypting a new local file, it will calculate the md5 sum and verify there are no existing uploads with the same md5, as to not have mutliple uploads of the same file.
+
+When uploading the file to object storage, the client passes in the md5 as a header to ensure the object storage client will error if the md5 of the uploaded file does not match the expected value.
+
+--------
+Database
+--------
+
+The database is a simple sqlite file stored locally.
 
 ==============
 Install client
@@ -76,7 +104,12 @@ Get compartment OCID and create bucket
 Crypto Key
 ==========
 
-To encrypt and decrypt file, you'll need a crypto key. The lenght of the crypto key must be a multiple of 16
+To encrypt and decrypt file, you'll need a crypto key. The crypto key can be any valid string including letters, numbers, and special characters. The length of the crypto key must be a multiple of 16.
+
+.. code-block:: none
+
+    ~>cat .backup-tool/crypto-key
+    1234567890123456
 
 ===========
 Config File
@@ -142,20 +175,19 @@ To backup a single file:
 
 .. code-block:: none
 
-    backup-tool file backup path/to/file
+    backup-tool file backup path/to/file [--overwrite]
 
 To backup an entire directory:
 
 .. code-block:: none
 
-    backup-tool directory backup path/to/dir
+    backup-tool directory backup path/to/dir [--overwrite]
 
 To backup a directory, while skipping files:
 
 .. code-block:: none
 
-    backup-tool directory backup path/to/dir --skip-files "*.txt"
-
+    backup-tool directory backup path/to/dir --skip-files "*.txt" [--overwrite]
 
 To list local files:
 
@@ -163,14 +195,26 @@ To list local files:
 
     backup-tool file list
 
-To list backup files:
+To list uploaded backup files:
 
 .. code-block:: none
 
     backup-tool backup list
 
-To restore a file:
+To restore a file from backup:
 
 .. code-block:: none
 
     backup-tool file restore <file-id>
+    
+Run cleanup to remove local file entries that no longer exist from the database:
+
+.. code-block:: none
+
+    backup-tool file cleanup [--dry-run]
+    
+Run cleanup to remove uploaded files that do not have a corresponding local file:
+
+.. code-block:: none
+
+    backup-tool backup cleanup [--dry-run]
