@@ -2,7 +2,7 @@
 Backup Tool
 ###########
 
-Encrypt and backup local files to Oracle Cloud Intrastructure ( OCI ) Object Storage.
+Encrypt and backup local files to Oracle Cloud Intrastructure (OCI) Object Storage.
 
 ========
 Overview
@@ -16,7 +16,7 @@ The tool can also restore these files from OCI Object storage, by first download
 Encryption Method
 -----------------
 
-The tool uses a very basic AES encryption method that uses a single password (crypto key )to encrypt and decrypt files.
+The tool uses a very basic AES encryption method that uses a single password (crypto key) to encrypt and decrypt files.
 
 The tool will read a file in 16-byte intervals, and encrypt this into a 24-byte hash using the password specified.
 
@@ -44,7 +44,7 @@ Install client
 
 .. code-block:: none
 
-    git clone git@github.com:tnoff/backup-tool.git
+    git clone https://github.com/tnoff/backup-tool.git
     pip install backup-tool/
 
 ==================
@@ -128,7 +128,6 @@ The following is an example config file:
     database_file = /home/user/.backup-tool/database.sql
     logging_file = /home/user/.backup-tool/backup-tool.log
     crypto_key_file = /home/user/.backup-tool/crypto-key
-
     relative_path = /home/user
 
     [oci]
