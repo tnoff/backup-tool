@@ -2,7 +2,7 @@
 Backup Tool
 ###########
 
-Backup local files to Oracle Cloud Intrastructure ( OCI ). The tool will encrypt local files and back them up to OCI Object Storage. 
+Encrypt and backup local files to Oracle Cloud Intrastructure ( OCI ) Object Storage.
 
 ========
 Overview
