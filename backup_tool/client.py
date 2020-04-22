@@ -380,10 +380,10 @@ class BackupClient():
                 self.logger.info("Local file %s path %s no longer present, removing from db", local_file.id, local_file_path)
                 if not dry_run:
                     self.db_session.query(BackupEntryLocalFile).filter_by(id=local_file.id).delete()
-                    self.db_session.commit()
                 files_cleaned.append(local_file.id)
             else:
                 self.logger.debug("Local file %s path %s exists, skipping", local_file.id, local_file_path)
+        self.db_session.commit()
         return files_cleaned
 
 
