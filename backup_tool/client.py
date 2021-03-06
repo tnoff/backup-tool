@@ -1,3 +1,5 @@
+from functools import partial
+from multiprocessing import Process, cpu_count
 import os
 import re
 import uuid
@@ -10,9 +12,20 @@ from backup_tool import crypto
 from backup_tool.database import BASE, BackupEntry, BackupEntryLocalFile
 from backup_tool import utils
 
+def chunk_list(list_object, num_parts):
+    chunks = []
+    index = 0
+    lengths = int(len(list_object) / num_parts)
+    for num in range(num_parts - 1):
+        chunks.append(list_object[index:((num + 1) * lengths)])
+        index += lengths
+    chunks.append(list_object[index:])
+    return chunks
+
+
 class BackupClient():
     def __init__(self, database_file, crypto_key, oci_config_file, oci_config_section, oci_namespace, oci_bucket,
-                 logging_file=None, relative_path=None):
+                 logging_file=None, relative_path=None, threads=cpu_count() * 2):
 
         self.logger = utils.setup_logger('backup_client', 10, logging_file=logging_file)
 
@@ -33,6 +46,7 @@ class BackupClient():
         self.oci_namespace = oci_namespace
         self.oci_bucket = oci_bucket
         self.os_client = backup_tool.oci_client.ObjectStorageClient(oci_config_file, oci_config_section, logger=self.logger)
+        self.cpu_threads = threads
 
     def _generate_uuid(self):
         '''
@@ -312,6 +326,10 @@ class BackupClient():
             backup_file_duplicates.pop(backup)
         return backup_file_duplicates
 
+    def __directory_backup(self, file_list, overwrite, check_uploaded_md5):
+        for file_name in file_list:
+            self._file_backup(file_name, overwrite=overwrite, check_uploaded_md5=check_uploaded_md5)
+
     def directory_backup(self, dir_path, overwrite=False, check_uploaded_md5=False,
                          skip_files=None):
         '''
@@ -330,7 +348,13 @@ class BackupClient():
         elif isinstance(skip_files, str):
             skip_files = [skip_files]
 
-        for dir_name, _, file_list in os.walk(directory_path):
+        # Add an empty list for each thread
+        files_lists = []
+        for _thread_num in range(self.cpu_threads):
+            file_lists.append([])
+
+        self.logger.info(f'Generating file list from directory "{directory_path}"')
+        for count, (dir_name, _, file_list) in enumerate(os.walk(directory_path)):
             # Check if dir matches skip files
             skip_dir = False
             for skip_check in skip_files:
@@ -340,7 +364,6 @@ class BackupClient():
                     break
             if skip_dir:
                 continue
-            self.logger.info("Backing up directory %s", dir_name)
             for file_name in file_list:
                 full_path = os.path.join(dir_name, file_name)
                 # Skip if matches any continue
@@ -350,10 +373,21 @@ class BackupClient():
                         self.logger.warning("Ignoring file %s since matches skip check %s", full_path, skip_check)
                         skip = True
                         break
-                if not skip:
-                    self._file_backup(full_path,
-                                      overwrite=overwrite,
-                                      check_uploaded_md5=check_uploaded_md5)
+                if skip:
+                    continue
+                self.logger.debug(f'Adding file to backup queue "{full_path}"')
+                file_lists[count % self.cpu_threads].append(full_path)
+
+        for thread_num in range(self.cpu_threads):
+            self.logger.info(f'Starting thread number {thread_num}')
+            process = Process(target=self.__directory_backup,
+                              args=(file_lists[thread_num], overwrite, check_uploaded_md5))
+            process.start()
+            threads.append(process)
+
+        for process in threads:
+            self.logger.debug(f'Waiting for thread "{process.name}"')
+            process.join()
 
     def file_list(self):
         '''
