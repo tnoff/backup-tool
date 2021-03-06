@@ -19,14 +19,8 @@ def temp_file(name=None, suffix='', delete=True):
     try:
         yield name
     finally:
-        if delete:
-            try:
-                os.remove(name)
-            except OSError as exc:
-                if exc.errno == os.errno.ENOENT:
-                    pass
-                else:
-                    raise
+        if delete and os.path.exists(name):
+            os.remove(name)
 
 def md5(input_file):
     '''

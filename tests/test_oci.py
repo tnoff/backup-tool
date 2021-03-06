@@ -113,46 +113,6 @@ class TestOCI(unittest.TestCase):
                     w.write(utils.random_string())
                 client.object_put(FAKE_NAMESPACE, FAKE_BUCKET, FAKE_OBJECT, temp_object)
 
-    def test_object_multipart_upload(self):
-        '''
-            Test multi part upload
-        '''
-
-        upload_id = 1234
-        fake_etag = utils.random_string()
-
-        class MockCreateMultipartData():
-            def __init__(self):
-                self.upload_id = upload_id
-
-        class MockPartHeaders():
-            def __init__(self, etag):
-                self.status = 200
-                self.headers = {
-                    'ETag' : etag,
-                }
-
-        class MockOSMultipart():
-            def __init__(self, *args, **kwargs):
-                pass
-
-            def create_multipart_upload(self, *args, **kwargs):
-                return MockObjectResponse(200, data=MockCreateMultipartData())
-
-            def upload_part(self, *args, **kwargs):
-                return MockPartHeaders(fake_etag)
-
-            def commit_multipart_upload(self, *args, **kwargs):
-                return MockPartHeaders(fake_etag)
-
-        with mock.patch("oci.object_storage.ObjectStorageClient") as mock_os:
-            mock_os.side_effect = MockOSMultipart
-            client = ObjectStorageClient(self.temp_config, CONFIG_SECTION)
-            with utils.temp_file() as temp_object:
-                with open(temp_object, 'w') as w:
-                    w.write(utils.random_string())
-                client.object_put(FAKE_NAMESPACE, FAKE_BUCKET, FAKE_OBJECT, temp_object,
-                                  force_multipart_upload=True, multipart_chunk_size=1)
     def test_object_delete(self):
         '''
             Test basic object delete
@@ -176,29 +136,29 @@ class TestOCI(unittest.TestCase):
 
         random_string = utils.random_string()
 
-        class MockDataStream():
-            def __init__(self):
-                class Raw():
+        with utils.temp_file() as temp_reader:
+            with open(temp_reader, 'w') as writer:
+                writer.write(random_string)
+            with open(temp_reader, 'rb') as reader:
+
+                class MockRawRequest():
                     def __init__(self):
-                        self.objects = [bytearray(random_string, 'utf8')]
-                    def stream(self, *args, **kwargs):
-                        return self.objects
-                self.raw = Raw()
+                        self.raw = reader
 
-        class MockOSGet():
-            def __init__(self, _config):
-                pass
+                class MockOSGet():
+                    def __init__(self, _config, *args, **kwargs):
+                        pass
 
-            def get_object(self, *args, **kwargs):
-                return MockObjectResponse(200, data=MockDataStream())
+                    def get_object(self, *args, **kwargs):
+                        return MockObjectResponse(200, data=MockRawRequest())
 
-        with mock.patch("oci.object_storage.ObjectStorageClient") as mock_os:
-            mock_os.side_effect = MockOSGet
-            client = ObjectStorageClient(self.temp_config, CONFIG_SECTION)
-            with utils.temp_file() as temp_object:
-                client.object_get(FAKE_NAMESPACE, FAKE_BUCKET, FAKE_OBJECT, temp_object)
+                with mock.patch("oci.object_storage.ObjectStorageClient") as mock_os:
+                    mock_os.side_effect = MockOSGet
+                    client = ObjectStorageClient(self.temp_config, CONFIG_SECTION)
+                    with utils.temp_file() as temp_object:
+                        client.object_get(FAKE_NAMESPACE, FAKE_BUCKET, FAKE_OBJECT, temp_object)
 
-                with open(temp_object, 'rb') as reader:
-                    data = reader.read()
-                    # String within b'string-foo'
-                    self.assertEqual(str(data)[2:-1], random_string)
+                        with open(temp_object, 'rb') as reader:
+                            data = reader.read()
+                            # String within b'string-foo'
+                            self.assertEqual(str(data)[2:-1], random_string)
