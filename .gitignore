@@ -2,3 +2,5 @@
 *.swp
 
 backup_tool/__pycahce__/
+backup_tool.egg-info/
+.tox
