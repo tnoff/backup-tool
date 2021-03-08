@@ -12,17 +12,6 @@ from backup_tool import crypto
 from backup_tool.database import BASE, BackupEntry, BackupEntryLocalFile
 from backup_tool import utils
 
-def chunk_list(list_object, num_parts):
-    chunks = []
-    index = 0
-    lengths = int(len(list_object) / num_parts)
-    for num in range(num_parts - 1):
-        chunks.append(list_object[index:((num + 1) * lengths)])
-        index += lengths
-    chunks.append(list_object[index:])
-    return chunks
-
-
 class BackupClient():
     def __init__(self, database_file, crypto_key, oci_config_file, oci_config_section, oci_namespace, oci_bucket,
                  logging_file=None, relative_path=None, threads=cpu_count() * 2):
