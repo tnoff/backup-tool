@@ -5,6 +5,9 @@ from backup_tool.exception import CLIException
 
 
 class CommonArgparse(ArgumentParser):
+    '''
+    Common argparse for other functions to inherit
+    '''
     def error(self, message):
         '''
         Some logic here to keep the error printing consistent

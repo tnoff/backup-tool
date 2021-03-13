@@ -4,6 +4,9 @@ from sqlalchemy.ext.declarative import declarative_base
 
 # taken from https://www.reddit.com/r/Python/comments/4kqdyg/cool_sqlalchemy_trick/
 def as_dict(self):
+    '''
+    Return database entry as dictionary
+    '''
     new_data = {}
     data = self.__dict__
     for key, value in data.items():
@@ -12,6 +15,9 @@ def as_dict(self):
     return new_data
 
 def inject_function(func):
+    '''
+    Inject function into database table as decorator
+    '''
     def decorated_class(cls):
         setattr(cls, func.__name__, func)
         return cls
@@ -24,6 +30,9 @@ BASE = declarative_base()
 
 @inject_function(as_dict)
 class BackupEntry(BASE):
+    '''
+    BackupEntry, uploaded copy of file
+    '''
     __tablename__ = 'backup_entry'
 
     # Primary key
@@ -40,6 +49,9 @@ class BackupEntry(BASE):
 
 @inject_function(as_dict)
 class BackupEntryLocalFile(BASE):
+    '''
+    BackupEntryLocalFile, local copy of file
+    '''
     __tablename__ = 'backup_entry_local_file'
 
     # Primary key

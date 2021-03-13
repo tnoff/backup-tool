@@ -7,13 +7,27 @@ import os
 import random
 import string
 
-def random_string(length=32, prefix="", suffix=""):
+def random_string(length=32, prefix='', suffix=''):
+    '''
+    Generate random string
+
+    length  :   Length of string
+    prefix  :   Prefix to place before random characters
+    suffix  :   Suffix to place after random characters
+    '''
     chars = string.ascii_lowercase + string.digits
-    generated = "".join(random.choice(chars) for _ in range(length))
-    return prefix + generated + suffix
+    generated = "".join(random.choice(chars) for _ in range(length - len(prefix) - len(suffix)))
+    return f'{prefix}{generated}{suffix}'
 
 @contextmanager
 def temp_file(name=None, suffix='', delete=True):
+    '''
+    Create temporary file
+
+    name    :   Name of temporary file
+    suffix  :   Suffix for temporary file name ( not used if name passed )
+    delete  :   Delete file after use
+    '''
     if not name:
         name = random_string(prefix='/tmp/', suffix=suffix)
     try:
@@ -43,6 +57,9 @@ def md5(input_file):
 
 def setup_logger(name, log_file_level, logging_file=None,
                  console_logging=True, console_logging_level=logging.INFO):
+    '''
+    Setup logging
+    '''
     logger = logging.getLogger(name)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s',
                                   datefmt='%Y-%m-%d %H:%M:%S')

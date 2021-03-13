@@ -4,6 +4,12 @@ from Crypto.Cipher import AES
 
 # https://stackoverflow.com/questions/519633/lazy-method-for-reading-big-file-in-python
 def read_in_chunks(file_name, chunk_size=16):
+    '''
+    Iterate over file in chunks
+
+    file_name   :   Name of file to read
+    chunk_size  :   Chunk size to return
+    '''
     while True:
         data = file_name.read(chunk_size)
         if not data:
@@ -11,6 +17,18 @@ def read_in_chunks(file_name, chunk_size=16):
         yield data
 
 def encrypt_file(input_file, output_file, passphrase):
+    '''
+    Encrypt file with a password
+
+    Note that this is a very simple encryption method
+
+    Reads file in 16 bit chunks, if the last chunk is not equal to 16, it will add "offset" of empty bits and encrypt.
+    This is then returned so that decryption knows to ignore these ending bits
+
+    input_file  :   File to encrypt
+    output_file :   Output encrypted file
+    passphrase  :   Encryption passphrase
+    '''
     cipher = AES.new(passphrase, AES.MODE_ECB)
     offset = 0
     with open(output_file, 'wb') as writer:
@@ -29,6 +47,14 @@ def encrypt_file(input_file, output_file, passphrase):
     return offset
 
 def decrypt_file(input_file, output_file, passphrase, offset):
+    '''
+    Decrypt file with password
+
+    input_file  :   File to decrypt
+    output_file :   Output decrypted file
+    passphrase  :   Encryption passphrase
+    offset      :   Offset from original encryption
+    '''
     cipher = AES.new(passphrase, AES.MODE_ECB)
     with open(output_file, 'wb') as writer:
         with open(input_file, 'rb') as reader:

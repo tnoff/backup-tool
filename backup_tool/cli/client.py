@@ -21,7 +21,13 @@ DEFAULT_SETTINGS_FILE = os.path.join(DEFAULT_CLIENT_PATH, 'config')
 
 
 class ClientCLI():
+    '''
+    CLI for Backup Client
+    '''
     def __init__(self, **kwargs):
+        '''
+        Backup Client
+        '''
         # Read crytpo key from file
         key_file = kwargs.pop('crypto_key_file')
         with open(key_file, 'r') as key_reader:
@@ -43,7 +49,10 @@ class ClientCLI():
         if value is not None:
             print(json.dumps(value, indent=4))
 
-def parse_args(args):
+def parse_args(args): #pylint:disable=too-many-locals,too-many-statements
+    '''
+    Parse command line args
+    '''
     parser = CommonArgparse(description="Client CLI")
     parser.add_argument("-s", "--settings-file", default=DEFAULT_SETTINGS_FILE,
                         help="Settings file")
@@ -142,6 +151,9 @@ def parse_args(args):
     return parsed_args
 
 def load_settings(settings_file):
+    '''
+    Load settings from file
+    '''
     if settings_file is None:
         return {}
     parser = SafeConfigParser()
@@ -167,6 +179,11 @@ def load_settings(settings_file):
 
 
 def generate_args(command_line_args):
+    '''
+    Generate client args from cli and settings file
+
+    Any argument given via cli will override one from settings file
+    '''
     cli_args = parse_args(command_line_args)
     args = load_settings(cli_args.pop('settings_file', None))
 
@@ -181,11 +198,11 @@ def generate_args(command_line_args):
     return args
 
 def main():
+    '''
+    Main Runner
+    '''
     try:
         args = generate_args(sys.argv[1:])
         ClientCLI(**args)
     except CLIException as error:
         print(str(error))
-
-if __name__ == '__main__':
-    main()

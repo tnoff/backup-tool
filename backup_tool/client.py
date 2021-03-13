@@ -1,4 +1,3 @@
-from functools import partial
 from multiprocessing import Process, cpu_count
 import os
 import re
@@ -13,8 +12,35 @@ from backup_tool.database import BASE, BackupEntry, BackupEntryLocalFile
 from backup_tool import utils
 
 class BackupClient():
+    '''
+    Backup Client
+    '''
     def __init__(self, database_file, crypto_key, oci_config_file, oci_config_section, oci_namespace, oci_bucket,
                  logging_file=None, relative_path=None, threads=cpu_count() * 2):
+        '''
+        Backup Client
+
+        database_file   :   Path for sqlite database
+        crypto_key      :   Crytography Passphrase
+        oci_config_file :   Path of OCI Config File
+        oci_config_section  : Path of OCI Config Section
+        oci_namespace   :   OCI Object Storage Namespace
+        oci_bucket      :   OCI Object Storage Bucket
+        logging_file    :   Path for logging file
+        relative_path   :   Where files should be placed relative to machine
+        threads         :   Number of threads to use during multiple uploads
+
+        Relative path explanation:
+        If relative path given as "/home/user"
+
+        If uploading file of path "/home/user/Documents/essay.txt", the relative path will be removed before adding the path to the database.
+        This means the path stored in the database will be "Documents/essay.txt"
+
+        Then when restoring files, the relative path will be added to the prefix of the files in the database.
+        So if the database has "Documents/essay.txt", the full path of the restored file will be "/home/user/Documents/essay.txt"
+
+        The basic idea here is to make moving files between different types of machines easier
+        '''
 
         self.logger = utils.setup_logger('backup_client', 10, logging_file=logging_file)
 
@@ -319,8 +345,7 @@ class BackupClient():
         for file_name in file_list:
             self._file_backup(file_name, overwrite=overwrite, check_uploaded_md5=check_uploaded_md5)
 
-    def directory_backup(self, dir_path, overwrite=False, check_uploaded_md5=False,
-                         skip_files=None):
+    def directory_backup(self, dir_path, overwrite=False, check_uploaded_md5=False, skip_files=None): #pylint:disable=too-many-locals
         '''
             Backup all files in directory
 
@@ -338,7 +363,7 @@ class BackupClient():
             skip_files = [skip_files]
 
         # Add an empty list for each thread
-        files_lists = []
+        file_lists = []
         for _thread_num in range(self.cpu_threads):
             file_lists.append([])
 
@@ -367,6 +392,8 @@ class BackupClient():
                 self.logger.debug(f'Adding file to backup queue "{full_path}"')
                 file_lists[count % self.cpu_threads].append(full_path)
 
+
+        threads = []
         for thread_num in range(self.cpu_threads):
             self.logger.info(f'Starting thread number {thread_num}')
             process = Process(target=self.__directory_backup,
