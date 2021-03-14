@@ -1,16 +1,17 @@
 import shutil
 
-import oci
+from oci.config import from_file
 from oci.retry import DEFAULT_RETRY_STRATEGY
-from oci.object_storage import UploadManager
 from oci.exceptions import ServiceError
+from oci.object_storage import ObjectStorageClient, UploadManager
+from oci.util import to_dict
 
 from oci.object_storage.models import RestoreObjectsDetails
 
 from backup_tool.exception import ObjectStorageException
 from backup_tool.utils import setup_logger
 
-class ObjectStorageClient():
+class OCIObjectStorageClient():
     '''
     Object Storage Client
     '''
@@ -22,9 +23,8 @@ class ObjectStorageClient():
         config_section  :   OCI Config File Section
         logger          :   Logger, if not given one will be created
         '''
-        config = oci.config.from_file(config_file, config_section)
-        self.object_storage_client = oci.object_storage.ObjectStorageClient(config,
-                                                                            retry_strategy=DEFAULT_RETRY_STRATEGY)
+        config = from_file(config_file, config_section)
+        self.object_storage_client = ObjectStorageClient(config, retry_strategy=DEFAULT_RETRY_STRATEGY)
         self.upload_manager = UploadManager(self.object_storage_client)
         if logger is None:
             self.logger = setup_logger("oci_client", 10)
@@ -55,7 +55,7 @@ class ObjectStorageClient():
                 raise ObjectStorageException from error
             if response.status != 200:
                 raise ObjectStorageException(f'Error list objects: {str(error)}')
-            all_objects += [oci.util.to_dict(obj) for obj in response.data.objects]
+            all_objects += [to_dict(obj) for obj in response.data.objects]
             next_page = response.data.next_start_with
             self.logger.debug(f'Retrieved list of up to {page_limit} objects, next page {next_page}')
             if next_page is None:

@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from backup_tool import crypto
-from backup_tool.oci_client import ObjectStorageClient
+from backup_tool.oci_client import OCIObjectStorageClient
 from backup_tool.database import BASE, BackupEntry, BackupEntryLocalFile
 from backup_tool import utils
 
@@ -60,7 +60,7 @@ class BackupClient():
 
         self.oci_namespace = oci_namespace
         self.oci_bucket = oci_bucket
-        self.os_client = ObjectStorageClient(oci_config_file, oci_config_section, logger=self.logger)
+        self.os_client = OCIObjectStorageClient(oci_config_file, oci_config_section, logger=self.logger)
         self.cpu_threads = threads
 
     def _generate_uuid(self):
