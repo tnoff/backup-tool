@@ -1,164 +1,115 @@
 import os
 import unittest
+import pytest
 
-import mock
+import oci
+from oci.object_storage import ObjectStorageClient
 
 from backup_tool import utils
 from backup_tool.exception import ObjectStorageException
-from backup_tool.oci_client import ObjectStorageClient
-
-FAKE_CONFIG = '''
-'''
-CONFIG_SECTION = 'DEFAULT'
-FAKE_NAMESPACE = 'citadel'
-FAKE_BUCKET = 'dragons'
-FAKE_OBJECT = 'The Dance of the Dragons, A True Telling'
+from backup_tool.oci_client import OCIObjectStorageClient
 
 def to_dict_mock(object_data):
     return vars(object_data)
 
-class MockObjectData():
-    def __init__(self, objects, start):
+class MockObject():
+    def __init__(self, name, size, md5):
+        self.name = name
+        self.size = size
+        self.md5 = md5
+        self.timeCreated = "2019-07-21T23:22:54.663000+00:00"
+
+class MockResponse():
+    def __init__(self, status, data):
+        self.status = status
+        self.data = data
+
+class MockList():
+    def __init__(self, objects):
         self.objects = objects
-        self.next_start_with = start
+        self.next_start_with = None
 
-class MockObjectResponse():
-    def __init__(self, status_code, data=None, objects=None, start=None):
-        self.status = status_code
-        # For list objects
-        if data:
-            self.data = data
-        else:
-            self.data = MockObjectData(objects, start)
+def test_object_list(mocker):
+    fake_name = utils.random_string()
+    class MockOCI():
+        def __init__(self, *args, **kwargs):
+            pass
 
-class TestOCI(unittest.TestCase):
-    def setUp(self):
-        # Setup oci config file
-        with utils.temp_file(delete=False) as temp_config:
-            with open(temp_config, 'w') as writer:
-                writer.write(FAKE_CONFIG)
-            # Save for teardown
-            self.temp_config = temp_config
+        def list_objects(self, *args, **kwargs):
+            return MockResponse(200, MockList([MockObject(fake_name, 123, '0123456')]))
+    mocker.patch('backup_tool.oci_client.from_file',
+                 return_value='')
+    mocker.patch('backup_tool.oci_client.ObjectStorageClient',
+                 return_value=MockOCI)
+    mocker.patch('backup_tool.oci_client.to_dict',
+                 side_effect=to_dict_mock)
+    client = OCIObjectStorageClient('', '')
+    # Make sure to pass page limit of 1
+    objects = client.object_list('', '', page_limit=1)
+    assert len(objects) == 1
+    assert objects[0]['name'] == fake_name
 
-    def cleanup(self):
-        os.remove(self.temp_config)
+def test_object_get(mocker):
+    test_data = '01234'
+    with utils.temp_file() as input_file:
+        with open(input_file, 'w') as writer:
+            writer.write(test_data)
+        with open(input_file, 'rb') as reader:
+            class MockRawRequest():
+                def __init__(self):
+                    self.raw = reader
+            class MockOCI():
+                def __init__(self, *args, **kwargs):
+                    pass
 
-    def test_object_list(self):
-        '''
-            Test object list w/ pagination
-        '''
-        # Generate some fake data for objects
-        fake_name_one = utils.random_string()
-        fake_name_two = utils.random_string()
-        fake_md5_one = utils.random_string()
-        fake_md5_two = utils.random_string()
+                def get_object(self, *args, **kwargs):
+                    return MockResponse(200, MockRawRequest())
 
-        # Mock out object data
-        class MockObjectOne():
-            def __init__(self):
-                self.name = fake_name_one
-                self.size = 1234
-                self.md5 = fake_md5_one
-                self.timeCreated = "2019-07-21T23:22:54.663000+00:00"
-        class MockObjectTwo():
-            def __init__(self):
-                self.name = fake_name_two
-                self.size = 4561
-                self.md5 = fake_md5_two
-                self.timeCreated = "2019-07-24T23:23:54.663000+00:00"
+            mocker.patch('backup_tool.oci_client.from_file',
+                         return_value='')
+            mocker.patch('backup_tool.oci_client.ObjectStorageClient',
+                         return_value=MockOCI)
+            mocker.patch('backup_tool.oci_client.to_dict',
+                         side_effect=to_dict_mock)
+            client = OCIObjectStorageClient('', '')
+            # Make sure to pass page limit of 1
+            with utils.temp_file() as temp_file:
+                objects = client.object_get('', '', '', temp_file)
+                md5 = utils.md5(temp_file)
+                assert md5 == 'QQDE1E2pF3JH5EpfwVRneA=='
 
-        # Mock client
-        class MockOSListObjects():
-            def __init__(self, *args, **kwargs):
-                pass
+def test_object_delete(mocker):
+    class MockOCI():
+        def __init__(self, *args, **kwargs):
+            pass
 
-            # Mock client pagination
-            # One first response, return first object with a next page key
-            # One second response, just return second item with no next page key
-            def list_objects(self, *args, **kwargs):
-                if kwargs.get('start') is None:
-                    return MockObjectResponse(200, objects=[MockObjectOne()], start=fake_name_two)
-                else:
-                    return MockObjectResponse(200, objects=[MockObjectTwo()], start=None)
+        def delete_object(self, *args, **kwargs):
+            return MockResponse(204, None)
+    mocker.patch('backup_tool.oci_client.from_file',
+                 return_value='')
+    mocker.patch('backup_tool.oci_client.ObjectStorageClient',
+                 return_value=MockOCI)
+    mocker.patch('backup_tool.oci_client.to_dict',
+                 side_effect=to_dict_mock)
+    client = OCIObjectStorageClient('', '')
+    client.object_delete('', '', '')
 
-        with mock.patch("oci.util.to_dict") as mock_to_dict:
-            mock_to_dict.side_effect = to_dict_mock
-            with mock.patch("oci.object_storage.ObjectStorageClient") as mock_os:
-                mock_os.side_effect = MockOSListObjects
-                client = ObjectStorageClient(self.temp_config, CONFIG_SECTION)
-                # Make sure to pass page limit of 1
-                objects = client.object_list(FAKE_NAMESPACE, FAKE_BUCKET, page_limit=1)
-                # Check two items in list, make sure in proper order
-                self.assertEqual(len(objects), 2)
-                self.assertEqual(objects[0]['md5'], fake_md5_one)
-                self.assertEqual(objects[1]['md5'], fake_md5_two)
+def test_object_put(mocker):
+    class MockOCI():
+        def __init__(self, *args, **kwargs):
+            pass
 
-    def test_object_put(self):
-        '''
-            Test basic object put
-        '''
-        class MockOSPutObject():
-            def __init__(self, *args, **kwargs):
-                pass
-
-            def put_object(self, namespace_name, bucket_name, object_name, file_name, **kwargs):
-                # Open file, then check later if file has been opened
-                return MockObjectResponse(200)
-
-        with mock.patch("oci.object_storage.ObjectStorageClient") as mock_os:
-            mock_os.side_effect = MockOSPutObject
-            client = ObjectStorageClient(self.temp_config, CONFIG_SECTION)
-            with utils.temp_file() as temp_object:
-                with open(temp_object, 'w') as w:
-                    w.write(utils.random_string())
-                client.object_put(FAKE_NAMESPACE, FAKE_BUCKET, FAKE_OBJECT, temp_object)
-
-    def test_object_delete(self):
-        '''
-            Test basic object delete
-        '''
-        class MockOSDelete():
-            def __init__(self, *args, **kwargs):
-                pass
-
-            def delete_object(self, *args, **kwargs):
-                return MockObjectResponse(204)
-
-        with mock.patch("oci.object_storage.ObjectStorageClient") as mock_os:
-            mock_os.side_effect = MockOSDelete
-            client = ObjectStorageClient(self.temp_config, CONFIG_SECTION)
-            client.object_delete(FAKE_NAMESPACE, FAKE_BUCKET, FAKE_OBJECT)
-
-    def test_object_get(self):
-        '''
-            Test object download
-        '''
-
-        random_string = utils.random_string()
-
-        with utils.temp_file() as temp_reader:
-            with open(temp_reader, 'w') as writer:
-                writer.write(random_string)
-            with open(temp_reader, 'rb') as reader:
-
-                class MockRawRequest():
-                    def __init__(self):
-                        self.raw = reader
-
-                class MockOSGet():
-                    def __init__(self, _config, *args, **kwargs):
-                        pass
-
-                    def get_object(self, *args, **kwargs):
-                        return MockObjectResponse(200, data=MockRawRequest())
-
-                with mock.patch("oci.object_storage.ObjectStorageClient") as mock_os:
-                    mock_os.side_effect = MockOSGet
-                    client = ObjectStorageClient(self.temp_config, CONFIG_SECTION)
-                    with utils.temp_file() as temp_object:
-                        client.object_get(FAKE_NAMESPACE, FAKE_BUCKET, FAKE_OBJECT, temp_object)
-
-                        with open(temp_object, 'rb') as reader:
-                            data = reader.read()
-                            # String within b'string-foo'
-                            self.assertEqual(str(data)[2:-1], random_string)
+        def put_object(self, *args, **kwargs):
+            return MockResponse(200, None)
+    mocker.patch('backup_tool.oci_client.from_file',
+                 return_value='')
+    mocker.patch('backup_tool.oci_client.ObjectStorageClient',
+                 return_value=MockOCI)
+    mocker.patch('backup_tool.oci_client.to_dict',
+                 side_effect=to_dict_mock)
+    client = OCIObjectStorageClient('', '')
+    fake_data = utils.random_string()
+    with utils.temp_file() as temp_file:
+        with open(temp_file, 'w+') as writer:
+            writer.write(fake_data)
+            client.object_put('', '', '', temp_file)
