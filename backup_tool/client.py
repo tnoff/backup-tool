@@ -6,7 +6,6 @@ import uuid
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-import backup_tool
 from backup_tool import crypto
 from backup_tool.oci_client import ObjectStorageClient
 from backup_tool.database import BASE, BackupEntry, BackupEntryLocalFile
@@ -47,10 +46,10 @@ class BackupClient():
 
         if database_file is None:
             engine = create_engine('sqlite:///', encoding='utf-8')
-            self.logger.debug("Initializing database with no file")
+            self.logger.debug('Initializing database with no file')
         else:
-            engine = create_engine('sqlite:///%s' % database_file, encoding='utf-8')
-            self.logger.debug("Initializing database with file:%s", database_file)
+            engine = create_engine(f'sqlite:///{database_file}', encoding='utf-8')
+            self.logger.debug(f'Initializing database with file: "{database_file}"')
 
         BASE.metadata.create_all(engine)
         BASE.metadata.bind = engine
@@ -76,8 +75,7 @@ class BackupClient():
                     filter(BackupEntry.uploaded_file_path == object_path).first()
             if not existing_path:
                 return object_path
-            self.logger.warning("UUID %s already in use, generating another", object_path)
-
+            self.logger.warning(f'UUID "{object_path}" already in use, generating another')
 
     def file_restore(self, local_file_id, overwrite=False, set_restore=False):
         '''
@@ -87,51 +85,51 @@ class BackupClient():
         overwrite       :   Overwrite local file if md5 does not match
         set_restore     :   If object is archived, attempt to restore
         '''
-        self.logger.info("Restoring local file:%s", local_file_id)
+        self.logger.info(f'Restoring local file: {local_file_id}')
 
         local_file = self.db_session.query(BackupEntryLocalFile).get(local_file_id)
         if not local_file:
-            self.logger.error("Unable to find local file:%s", local_file_id)
+            self.logger.error(f'Unable to find local file: {local_file_id}')
             return False
 
         if not local_file.backup_entry_id:
-            self.logger.error("No backup entry for local file:%s", local_file_id)
+            self.logger.error(f'No backup entry for local file: {local_file_id}')
             return False
 
         backup_entry = self.db_session.query(BackupEntry).get(local_file.backup_entry_id)
 
         if not backup_entry:
-            self.logger.error("Expecting backup entry %s does not exist", local_file.backup_entry_id)
+            self.logger.error(f'Expecting backup entry {local_file.backup_entry_id} does not exist')
 
         local_file_path = local_file.local_file_path
         if self.relative_path:
             local_file_path = os.path.join(self.relative_path, local_file_path)
 
         if os.path.isfile(local_file_path):
-            self.logger.debug("Checking local file %s md5", local_file_path)
+            self.logger.debug(f'Checking local file "{local_file_path}" md5')
             local_file_md5 = utils.md5(local_file_path)
-            self.logger.debug("Local file %s has md5 sum %s", local_file_path, local_file_md5)
+            self.logger.debug(f'Local file "{local_file_path}" has md5 sum {local_file_md5}')
             if local_file.local_md5_checksum == local_file_md5:
                 if not overwrite:
-                    self.logger.info("Local file %s has expected md5 %s", local_file_path, local_file_md5)
+                    self.logger.info(f'Local file "{local_file_path}" has expected md5 {local_file_md5}')
                     return True
 
         # Write file to temp dir
         with utils.temp_file() as encrypted_file:
-            self.logger.info("Downloading object %s to temp file %s", backup_entry.uploaded_file_path, encrypted_file)
+            self.logger.info(f'Downloading object {backup_entry.uploaded_file_path} to temp file "{encrypted_file}"')
             self.os_client.object_get(self.oci_namespace, self.oci_bucket,
                                       backup_entry.uploaded_file_path, encrypted_file, set_restore=set_restore)
-            self.logger.info("Downloaded of object %s complete, written to temp file %s", backup_entry.uploaded_file_path, encrypted_file)
+            self.logger.info(f'Downloaded of object {backup_entry.uploaded_file_path} complete, written to temp file "{encrypted_file}"')
 
             # Check md5 matches expected
-            self.logger.debug("Checking md5 sum of temp file %s", encrypted_file)
+            self.logger.debug(f'Checking md5 sum of temp file "{encrypted_file}"')
             downloaded_md5 = utils.md5(encrypted_file)
-            self.logger.debug("Downloaded encrypted file %s has md5 sum %s", encrypted_file, downloaded_md5)
+            self.logger.debug(f'Downloaded encrypted file "{encrypted_file}" has md5 sum {downloaded_md5}')
             if backup_entry.uploaded_md5_checksum != downloaded_md5:
-                self.logger.error("Downloaded file %s has unexpected md5 %s, expected %s",
-                                  encrypted_file, downloaded_md5, backup_entry.uploaded_md5_checksum)
+                self.logger.error(f'Downloaded file "{encrypted_file}" has unexpected md5 {downloaded_md5}, '
+                                  f'expected {backup_entry.uploaded_md5_checksum}')
                 return True
-            self.logger.debug("Decrypting temp file %s to file %s", encrypted_file, local_file_path)
+            self.logger.debug(f'Decrypting temp file "{encrypted_file}" to file "{local_file_path}"')
             dir_name = os.path.dirname(local_file_path)
             if not os.path.isdir(dir_name):
                 os.makedirs(dir_name)
@@ -139,10 +137,9 @@ class BackupClient():
                                                  backup_entry.uploaded_encryption_offset)
 
 
-        self.logger.debug("Local file %s has md5 sum %s", local_file_path, local_file_md5)
+        self.logger.debug(f'Local file "{local_file_path}" has md5 sum {local_file_md5}')
         if local_file_md5 != local_file.local_md5_checksum:
-            self.logger.error("MD5 %s of decrypted file %s does not match expected %s",
-                              local_file_md5, local_file_path, local_file.local_md5_checksum)
+            self.logger.error(f'MD5 {local_file_md5} of decrypted file "{local_file_path}" does not match expected {local_file.local_md5_checksum}')
             return False
         return True
 
@@ -196,35 +193,32 @@ class BackupClient():
         # Keep boolean value to make sure we should upload new file
         upload_file = True
 
-        self.logger.debug("Found existing local file:%s", local_backup_file.id)
+        self.logger.debug(f'Found existing local file: {local_backup_file.id}')
         if local_file_md5 == local_backup_file.local_md5_checksum:
-            self.logger.debug("Existing local file %s has expected md5 %s", local_file, local_file_md5)
+            self.logger.debug(f'Existing local file "{local_file}" has expected md5 {local_file_md5}')
             # Only upload if no backup file exists
             # If requested, check that backup file matches encryption
             if local_backup_file.backup_entry_id is not None and check_uploaded_md5 is False:
                 upload_file = False
         else:
-            self.logger.debug("Existing local file %s has unexpected  md5 sum %s", local_file, local_file_md5)
+            self.logger.debug(f'Existing local file "{local_file}" has unexpected md5 sum {local_file_md5}')
             if overwrite is True:
                 local_backup_file.local_md5_checksum = local_file_md5
                 # Current file has no backup, so set this to null for now
                 local_backup_file.backup_entry_id = None
                 self.db_session.commit()
-                self.logger.debug("Updated local file %s to checksum %s",
-                                  local_backup_file.id, local_file_md5)
+                self.logger.debug(f'Updated local file {local_backup_file.id} to checksum {local_file_md5}')
             else:
-                self.logger.warning("Overwrite set to false, not uploading new version of local file %s", local_file)
+                self.logger.warning(f'Overwrite set to false, not uploading new version of local file "{local_file}"')
                 upload_file = False
         return upload_file
 
     def _file_backup_upload(self, local_file, local_backup_file):
         with utils.temp_file() as crypto_file:
-            self.logger.debug("Creating encrypted file %s from file %s",
-                              crypto_file, local_file)
+            self.logger.debug(f'Creating encrypted file "{crypto_file}" from file "{local_file}"')
             offset, local_crypto_file_md5 = crypto.encrypt_file(local_file, crypto_file, self.crypto_key)
-            self.logger.info("Created encrypted file %s from file %s with offset %s",
-                             crypto_file, local_file, offset)
-            self.logger.info("Encrypted file %s has md5 sum %s", crypto_file, local_crypto_file_md5)
+            self.logger.info(f'Created encrypted file "{crypto_file}" from file "{local_file}" with offset {offset}')
+            self.logger.info(f'Encrypted file "{crypto_file}" has md5 sum {local_crypto_file_md5}')
 
             # Check if md5 file already exists
             backup_entry = self.db_session.query(BackupEntry).\
@@ -232,21 +226,17 @@ class BackupClient():
 
             if backup_entry:
                 # If file exists, just upload local files data
-                self.logger.debug("Found existing upload with matching md5 found %s for file %s",
-                                  backup_entry.id, local_file)
+                self.logger.debug(f'Found existing upload with matching md5 found {backup_entry.id} for file "{local_file}"')
                 local_backup_file.backup_entry_id = backup_entry.id
                 self.db_session.commit()
-                self.logger.info("Updated local file %s with backup entry %s", local_backup_file.id, backup_entry.id)
+                self.logger.info(f'Updated local file {local_backup_file.id} with backup entry {backup_entry.id}')
                 return True
 
             # Else upload new file
-            self.logger.info("No encrypted upload matching file with md5 %s, uploading copy",
-                             local_crypto_file_md5)
-
+            self.logger.info(f'No encrypted upload matching file with md5 {local_crypto_file_md5}, uploading copy')
             object_path = self._generate_uuid()
 
-            self.logger.debug("Uploading encrypted file %s to object path %s",
-                              crypto_file, object_path)
+            self.logger.debug(f'Uploading encrypted file "{crypto_file}" to object path {object_path}')
             self.os_client.object_put(self.oci_namespace, self.oci_bucket, object_path, crypto_file,
                                       md5_sum=local_crypto_file_md5)
 
@@ -259,13 +249,11 @@ class BackupClient():
         backup_entry = BackupEntry(**backup_args)
         self.db_session.add(backup_entry)
         self.db_session.commit()
-        self.logger.info("Uploaded encrypted file %s as backup entry %s",
-                         crypto_file, backup_entry.id)
+        self.logger.info(f'Uploaded encrypted file "{crypto_file}" as backup entry {backup_entry.id}')
 
         local_backup_file.backup_entry_id = backup_entry.id
         self.db_session.commit()
-        self.logger.info("Updated local backup %s to match backup entry %s",
-                         local_backup_file.id, backup_entry.id)
+        self.logger.info(f'Updated local backup {local_backup_file.id} to match backup entry {backup_entry.id}')
         return True
 
     def _file_backup(self, local_file, overwrite=False, check_uploaded_md5=False):
@@ -283,15 +271,15 @@ class BackupClient():
             local_file_path = os.path.relpath(local_file, self.relative_path)
         else:
             local_file_path = local_file
-        self.logger.info("Backing up local file:%s", local_file)
+        self.logger.info(f'Backing up local file: "{local_file}"')
         if local_file_path != local_file:
-            self.logger.debug("Using relative path for database %s", local_file_path)
+            self.logger.debug(f'Using relative path for database "{local_file_path}"')
 
 
         # First check if local file exists, and if so, has md5 changed
-        self.logger.debug("Checking md5 sum for local file %s", local_file)
+        self.logger.debug(f'Checking md5 sum for local file "{local_file}"')
         local_file_md5 = utils.md5(local_file)
-        self.logger.debug("Local file %s md5 sum:%s", local_file, local_file_md5)
+        self.logger.debug(f'Local file "{local_file}" md5 sum {local_file_md5}')
 
         local_backup_file = self.db_session.query(BackupEntryLocalFile).\
                 filter(BackupEntryLocalFile.local_file_path == local_file_path).first()
@@ -300,7 +288,7 @@ class BackupClient():
                                                         local_file_md5, overwrite, check_uploaded_md5)
         else:
             upload_file = True
-            self.logger.debug("No existing local file found for path:%s", local_file)
+            self.logger.debug(f'No existing local file found for path: "{local_file}"')
             backup_file_args = {
                 'local_file_path': local_file_path,
                 'local_md5_checksum' : local_file_md5,
@@ -309,7 +297,7 @@ class BackupClient():
             local_backup_file = BackupEntryLocalFile(**backup_file_args)
             self.db_session.add(local_backup_file)
             self.db_session.commit()
-            self.logger.info("Created database entry %s for local file %s", local_backup_file.id, local_file)
+            self.logger.info(f'Created database entry {local_backup_file.id} for local file "{local_file}"')
 
         if upload_file:
             return self._file_backup_upload(local_file, local_backup_file)
@@ -369,7 +357,7 @@ class BackupClient():
             skip_dir = False
             for skip_check in skip_files:
                 if re.match(skip_check, dir_name):
-                    self.logger.warning("Ignoring dir %s since matches skip check %s", dir_name, skip_check)
+                    self.logger.warning(f'Ignoring dir "{dir_name}" since matches skip check "{skip_check}"')
                     skip_dir = True
                     break
             if skip_dir:
@@ -380,7 +368,7 @@ class BackupClient():
                 skip = False
                 for skip_check in skip_files:
                     if re.match(skip_check, full_path):
-                        self.logger.warning("Ignoring file %s since matches skip check %s", full_path, skip_check)
+                        self.logger.warning(f'Ignoring file "{full_path}" since matches skip check "{skip_check}"')
                         skip = True
                         break
                 if skip:
@@ -423,12 +411,12 @@ class BackupClient():
             if self.relative_path:
                 local_file_path = os.path.join(self.relative_path, local_file_path)
             if not os.path.isfile(local_file_path):
-                self.logger.info("Local file %s path %s no longer present, removing from db", local_file.id, local_file_path)
+                self.logger.info(f'Local file {local_file.id} path "{local_file_path}" no longer present, removing from db')
                 if not dry_run:
                     self.db_session.query(BackupEntryLocalFile).filter_by(id=local_file.id).delete()
                 files_cleaned.append(local_file.id)
             else:
-                self.logger.debug("Local file %s path %s exists, skipping", local_file.id, local_file_path)
+                self.logger.debug(f'Local file {local_file.id} path "{local_file_path}" exists, skipping')
         self.db_session.commit()
         return files_cleaned
 
@@ -452,7 +440,7 @@ class BackupClient():
 
         extra_backup_entries = list(set(backup_entry_ids) - set(local_file_backups))
 
-        self.logger.info("Found backup file entries %s that do not have local files", extra_backup_entries)
+        self.logger.info(f'Found backup file entries {extra_backup_entries} that do not have local files')
 
         for backup in self.db_session.query(BackupEntry).filter(BackupEntry.id.in_(extra_backup_entries)):
             if not dry_run:
