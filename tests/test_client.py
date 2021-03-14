@@ -182,8 +182,8 @@ class TestClient(unittest.TestCase):
                         client = BackupClient(temp_db, FAKE_CRYPTO_KEY, FAKE_CONFIG, FAKE_SECTION,
                                               FAKE_NAMESPACE, FAKE_BUCKET)
 
-                        offset = client.file_encrypt(temp_file_input, temp_file_output)
-                        self.assertEqual(offset, 0)
+                        result = client.file_encrypt(temp_file_input, temp_file_output)
+                        self.assertEqual(result['offset'], 0)
 
                         with open(temp_file_output, 'r') as reader:
                             read_data = reader.read()

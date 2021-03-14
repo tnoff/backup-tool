@@ -134,13 +134,10 @@ class BackupClient():
             dir_name = os.path.dirname(local_file_path)
             if not os.path.isdir(dir_name):
                 os.makedirs(dir_name)
-            crypto.decrypt_file(encrypted_file, local_file_path, self.crypto_key,
-                                backup_entry.uploaded_encryption_offset)
+            local_file_md5 = crypto.decrypt_file(encrypted_file, local_file_path, self.crypto_key,
+                                                 backup_entry.uploaded_encryption_offset)
 
 
-        # Check md5 matches expected
-        self.logger.debug("Checking md5 of file %s", local_file_path)
-        local_file_md5 = utils.md5(local_file_path)
         self.logger.debug("Local file %s has md5 sum %s", local_file_path, local_file_md5)
         if local_file_md5 != local_file.local_md5_checksum:
             self.logger.error("MD5 %s of decrypted file %s does not match expected %s",
@@ -164,10 +161,10 @@ class BackupClient():
         local_input_file    :   Full path of local input file
         local_ouput_file    :   Full path of local ouptut file
         '''
-        offset = crypto.encrypt_file(local_input_file, local_output_file, self.crypto_key)
-        self.logger.info("Encrypted local file %s to output file %s with offset %s",
-                         local_input_file, local_output_file, offset)
-        return offset
+        offset, md5 = crypto.encrypt_file(local_input_file, local_output_file, self.crypto_key)
+        self.logger.info(f'Encrypted local file "{local_input_file}" to output file "{local_output_file}" '
+                         f'with offset {offset} and md5 sum {md5}')
+        return {'offset': offset, 'encrypted_md5': md5}
 
     def file_decrypt(self, local_input_file, local_output_file, offset):
         '''
@@ -177,9 +174,9 @@ class BackupClient():
         local_ouput_file    :   Full path of local ouptut file
         offset              :   Offset number to use in decryption
         '''
-        crypto.decrypt_file(local_input_file, local_output_file, self.crypto_key, offset)
-        self.logger.info("Derypted local file %s to output file %s", local_input_file, local_output_file)
-        return True
+        md5 = crypto.decrypt_file(local_input_file, local_output_file, self.crypto_key, offset)
+        self.logger.info(f'Derypted local file "{local_input_file}" to output file "{local_output_file}" with md5 {md5}')
+        return md5
 
     def file_backup(self, local_file, overwrite=False, check_uploaded_md5=False):
         '''
@@ -223,11 +220,9 @@ class BackupClient():
         with utils.temp_file() as crypto_file:
             self.logger.debug("Creating encrypted file %s from file %s",
                               crypto_file, local_file)
-            offset = crypto.encrypt_file(local_file, crypto_file, self.crypto_key)
+            offset, local_crypto_file_md5 = crypto.encrypt_file(local_file, crypto_file, self.crypto_key)
             self.logger.info("Created encrypted file %s from file %s with offset %s",
                              crypto_file, local_file, offset)
-            self.logger.debug("Checking md5 sum of file %s", crypto_file)
-            local_crypto_file_md5 = utils.md5(crypto_file)
             self.logger.info("Encrypted file %s has md5 sum %s", crypto_file, local_crypto_file_md5)
 
             # Check if md5 file already exists

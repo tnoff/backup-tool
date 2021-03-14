@@ -1,4 +1,6 @@
 import base64
+import codecs
+import hashlib
 
 from Crypto.Cipher import AES
 
@@ -31,6 +33,7 @@ def encrypt_file(input_file, output_file, passphrase):
     '''
     cipher = AES.new(passphrase, AES.MODE_ECB)
     offset = 0
+    hash_value = hashlib.md5()
     with open(output_file, 'wb') as writer:
         with open(input_file, 'rb') as reader:
             for chunk in read_in_chunks(reader):
@@ -43,8 +46,10 @@ def encrypt_file(input_file, output_file, passphrase):
                     chunk = chunk.ljust(16)
                 encoded_bit = cipher.encrypt(chunk)
                 encoded_chunk = base64.b64encode(encoded_bit)
+                hash_value.update(encoded_chunk)
                 writer.write(encoded_chunk)
-    return offset
+    md5_value = codecs.encode(hash_value.digest(), 'base64')
+    return offset, str(md5_value).rstrip("\\n'")[2:]
 
 def decrypt_file(input_file, output_file, passphrase, offset):
     '''
@@ -56,6 +61,7 @@ def decrypt_file(input_file, output_file, passphrase, offset):
     offset      :   Offset from original encryption
     '''
     cipher = AES.new(passphrase, AES.MODE_ECB)
+    hash_value = hashlib.md5()
     with open(output_file, 'wb') as writer:
         with open(input_file, 'rb') as reader:
 
@@ -67,6 +73,7 @@ def decrypt_file(input_file, output_file, passphrase, offset):
                     break
                 if decoded_chunk is not None:
                     writer.write(decoded_chunk)
+                    hash_value.update(decoded_chunk)
                 decoded_bit = base64.b64decode(chunk)
                 decoded_chunk = cipher.decrypt(decoded_bit)
 
@@ -75,5 +82,7 @@ def decrypt_file(input_file, output_file, passphrase, offset):
                 decoded_chunk = decoded_chunk[:-offset]
             if decoded_chunk != b'' and decoded_chunk is not None:
                 writer.write(decoded_chunk)
+                hash_value.update(decoded_chunk)
 
-    return True
+    md5_value = codecs.encode(hash_value.digest(), 'base64')
+    return str(md5_value).rstrip("\\n'")[2:]
