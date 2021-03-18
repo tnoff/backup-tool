@@ -11,3 +11,8 @@ def test_md5():
             writer.write('foo\n')
         md5_value = utils.md5(temp)
     assert md5_value == value, 'MD5 value not equal to expected'
+
+def test_setup_logger():
+    with utils.temp_file() as temp:
+        log = utils.setup_logger('test', 10, logging_file=temp)
+    log.debug(f'Running log test with log file {temp}')
