@@ -15,6 +15,6 @@ setuptools.setup(
             'backup-tool = backup_tool.cli.client:main',
         ]
     },
-    packages=setuptools.find_packages(exclude=['tests']),
+    packages=setuptools.find_packages(exclude=['htmlcov','tests']),
     version='0.0.16',
 )
