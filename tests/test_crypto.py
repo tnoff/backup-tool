@@ -1,5 +1,4 @@
 import os
-import unittest
 
 from backup_tool import crypto
 from backup_tool import utils
@@ -14,12 +13,14 @@ def test_encyrpt_file_md5():
         # Write random data to file
         with open(input_temp, 'w') as writer:
             writer.write(randomish_string)
+        orig_md5_sum = utils.md5(input_temp)
 
         # Ecnrypt and decrypt file, make sure md5 matches
         with utils.temp_file() as encrypted:
-            offset, en_md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
+            _offset, or_md5, en_md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
             verified_md5 = utils.md5(encrypted)
             assert en_md5 == verified_md5
+            assert orig_md5_sum == or_md5
 
 def test_encyrpt_file_md5_binary():
     # Generate passhparse
@@ -34,9 +35,10 @@ def test_encyrpt_file_md5_binary():
 
         # Ecnrypt and decrypt file, make sure md5 matches
         with utils.temp_file() as encrypted:
-            offset, en_md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
+            _offset, or_md5, en_md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
             verified_md5 = utils.md5(encrypted)
             assert en_md5 == verified_md5
+            assert md5_sum == or_md5
 
 def test_encyrpt_decrypt_file():
     # Generate passhparse
@@ -52,7 +54,7 @@ def test_encyrpt_decrypt_file():
 
         # Ecnrypt and decrypt file, make sure md5 matches
         with utils.temp_file() as encrypted:
-            offset, _md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
+            offset, _o_md5, _en_md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
 
             with utils.temp_file() as decrypted:
                 crypto.decrypt_file(encrypted, decrypted, passphrase, offset)
@@ -75,7 +77,7 @@ def test_encyrpt_decrypt_md5():
 
         # Ecnrypt and decrypt file, make sure md5 matches
         with utils.temp_file() as encrypted:
-            offset, _md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
+            offset, _o_md5, _en_md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
 
             with utils.temp_file() as decrypted:
                 de_md5 = crypto.decrypt_file(encrypted, decrypted, passphrase, offset)
@@ -96,7 +98,7 @@ def test_encyrpt_decrypt_file_binary():
 
         # Ecnrypt and decrypt file, make sure md5 matches
         with utils.temp_file() as encrypted:
-            offset, _md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
+            offset, _o_md5, _en_md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
 
             with utils.temp_file() as decrypted:
                 crypto.decrypt_file(encrypted, decrypted, passphrase, offset)
@@ -118,7 +120,7 @@ def test_encyrpt_decrypt_binary_md5():
 
         # Ecnrypt and decrypt file, make sure md5 matches
         with utils.temp_file() as encrypted:
-            offset, _md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
+            offset, _o_md5, _e_md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
 
             with utils.temp_file() as decrypted:
                 de_md5 = crypto.decrypt_file(encrypted, decrypted, passphrase, offset)
@@ -145,12 +147,12 @@ def test_encrypt_file_copy():
             assert md5_sum1 == md5_sum2
             # Make sure encrypting both files gets same results
             with utils.temp_file() as encrypted1:
-                offset1, md5_sum1 = crypto.encrypt_file(input_temp1, encrypted1, passphrase)
+                offset1, _o_md5_sum1, en_md5_sum1 = crypto.encrypt_file(input_temp1, encrypted1, passphrase)
                 with utils.temp_file() as encrypted2:
-                    offset2, md5_sum2 = crypto.encrypt_file(input_temp2, encrypted2, passphrase)
+                    offset2, _md5_sum2, de_md5_sum2  = crypto.encrypt_file(input_temp2, encrypted2, passphrase)
 
                     # Make sure file is same
-                    assert md5_sum1 == md5_sum2
+                    assert en_md5_sum1 == de_md5_sum2
                     assert offset1 == offset2
 
 def test_encrypt_small_file():
@@ -167,7 +169,7 @@ def test_encrypt_small_file():
 
         # Ecnrypt and decrypt file, make sure md5 matches
         with utils.temp_file() as encrypted:
-            offset, _md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
+            offset, _o_md5, _en_md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
 
             with utils.temp_file() as decrypted:
                 crypto.decrypt_file(encrypted, decrypted, passphrase, offset)
@@ -189,7 +191,7 @@ def test_encrypt_spaces():
 
         # Ecnrypt and decrypt file, make sure md5 matches
         with utils.temp_file() as encrypted:
-            offset, _md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
+            offset, _omd5, _en_md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
 
             with utils.temp_file() as decrypted:
                 crypto.decrypt_file(encrypted, decrypted, passphrase, offset)
@@ -210,7 +212,7 @@ def test_encrypt_magic_number_16():
 
         # Ecnrypt and decrypt file, make sure md5 matches
         with utils.temp_file() as encrypted:
-            offset, _md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
+            offset, _o_md5, _e_md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
 
             with utils.temp_file() as decrypted:
                 crypto.decrypt_file(encrypted, decrypted, passphrase, offset)
@@ -231,7 +233,7 @@ def test_encrypt_magic_number_20():
 
         # Ecnrypt and decrypt file, make sure md5 matches
         with utils.temp_file() as encrypted:
-            offset, _md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
+            offset, _o_md5, _e_md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
 
             with utils.temp_file() as decrypted:
                 crypto.decrypt_file(encrypted, decrypted, passphrase, offset)
@@ -252,7 +254,7 @@ def test_encrypt_empty_file():
 
         # Ecnrypt and decrypt file, make sure md5 matches
         with utils.temp_file() as encrypted:
-            offset, _md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
+            offset, _o_md5, _e_md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
 
             with utils.temp_file() as decrypted:
                 crypto.decrypt_file(encrypted, decrypted, passphrase, offset)
@@ -273,7 +275,7 @@ def test_encrypt_largish_file():
 
         # Ecnrypt and decrypt file, make sure md5 matches
         with utils.temp_file() as encrypted:
-            offset, _md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
+            offset, _o_md5, _e_md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
 
             with utils.temp_file() as decrypted:
                 crypto.decrypt_file(encrypted, decrypted, passphrase, offset)
@@ -295,7 +297,7 @@ def test_encrypt_largish_file_text():
 
         # Ecnrypt and decrypt file, make sure md5 matches
         with utils.temp_file() as encrypted:
-            offset, _md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
+            offset, _omd5, _emd5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
 
             with utils.temp_file() as decrypted:
                 crypto.decrypt_file(encrypted, decrypted, passphrase, offset)
@@ -318,7 +320,7 @@ def test_encrypt_trail_spaces():
 
         # Ecnrypt and decrypt file, make sure md5 matches
         with utils.temp_file() as encrypted:
-            offset, _md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
+            offset, _o_md5, _e_md5 = crypto.encrypt_file(input_temp, encrypted, passphrase)
 
             with utils.temp_file() as decrypted:
                 crypto.decrypt_file(encrypted, decrypted, passphrase, offset)

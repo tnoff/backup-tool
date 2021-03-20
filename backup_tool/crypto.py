@@ -33,10 +33,12 @@ def encrypt_file(input_file, output_file, passphrase):
     '''
     cipher = AES.new(passphrase, AES.MODE_ECB)
     offset = 0
-    hash_value = hashlib.md5()
+    original_hash_value = hashlib.md5()
+    encrypted_hash_value = hashlib.md5()
     with open(output_file, 'wb') as writer:
         with open(input_file, 'rb') as reader:
             for chunk in read_in_chunks(reader):
+                original_hash_value.update(chunk)
                 if len(chunk) != 16:
                     # Possible last chunk not 16 bits in length
                     # When this happens, return offset that was added
@@ -46,10 +48,11 @@ def encrypt_file(input_file, output_file, passphrase):
                     chunk = chunk.ljust(16)
                 encoded_bit = cipher.encrypt(chunk)
                 encoded_chunk = base64.b64encode(encoded_bit)
-                hash_value.update(encoded_chunk)
+                encrypted_hash_value.update(encoded_chunk)
                 writer.write(encoded_chunk)
-    md5_value = codecs.encode(hash_value.digest(), 'base64')
-    return offset, str(md5_value).rstrip("\\n'")[2:]
+    original_md5_value = str(codecs.encode(original_hash_value.digest(), 'base64')).rstrip("\\n'")[2:]
+    encrypted_md5_value = str(codecs.encode(encrypted_hash_value.digest(), 'base64')).rstrip("\\n'")[2:]
+    return offset, original_md5_value, encrypted_md5_value
 
 def decrypt_file(input_file, output_file, passphrase, offset):
     '''
