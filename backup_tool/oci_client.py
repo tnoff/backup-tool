@@ -54,7 +54,7 @@ class OCIObjectStorageClient():
             except ServiceError as error:
                 raise ObjectStorageException from error
             if response.status != 200:
-                raise ObjectStorageException(f'Error list objects: {str(error)}')
+                raise ObjectStorageException(f'Error list objects, Reponse code {response.status}')
             all_objects += [to_dict(obj) for obj in response.data.objects]
             next_page = response.data.next_start_with
             self.logger.debug(f'Retrieved list of up to {page_limit} objects, next page {next_page}')
@@ -75,7 +75,7 @@ class OCIObjectStorageClient():
                          f'bucket "{bucket_name}" and object name "{object_name}"')
         response = self.upload_manager.upload_file(namespace_name, bucket_name, object_name, file_name, content_md5=md5_sum)
         if response.status != 200:
-            raise ObjectStorageException(f'Error uploading object: {str(response.data)}')
+            raise ObjectStorageException(f'Error uploading object, Reponse code {str(response.status)}')
         self.logger.info(f'File "{file_name}" uploaded to object storage with object name "{object_name}"')
         return True
 
@@ -92,25 +92,26 @@ class OCIObjectStorageClient():
         self.logger.info(f'Downloading object "{object_name}" from namespace "{namespace_name}" and bucket "{bucket_name}" to file "{file_name}"')
         with open(file_name, 'wb') as writer:
             try:
-                response = self.object_storage_client.get_object(namespace_name,
-                                                                 bucket_name,
-                                                                 object_name)
+                get_response = self.object_storage_client.get_object(namespace_name,
+                                                                     bucket_name,
+                                                                     object_name)
             except ServiceError as error:
                 self.logger.exception(f'Service Error when attempting to download object: {str(error)}')
                 if set_restore and "'code': 'NotRestored'" in str(error):
                     self.logger.debug(f'Object "{object_name}" in bucket "{bucket_name}" and namepsace '
                                       f'"{namespace_name}" is archived, will mark for restore')
                     restore_details = RestoreObjectsDetails(object_name=object_name)
-                    response = self.object_storage_client.restore_objects(namespace_name, bucket_name, restore_details)
-                    if response.status != 202:
-                        raise ObjectStorageException from error
+                    restore_response = self.object_storage_client.restore_objects(namespace_name, bucket_name, restore_details)
+                    if restore_response.status != 202:
+                        raise ObjectStorageException('Error restoring object, ' # pylint:disable=raise-missing-from
+                                                     f'Response code {str(restore_response.status)}')
                     self.logger.info(f'Set restore on object "{object_name}" in bucket "{bucket_name}" and namespace "{namespace_name}"')
                 return False
 
-            if response.status != 200:
-                raise ObjectStorageException(f'Error downloading object: {str(response.data)}')
+            if get_response.status != 200:
+                raise ObjectStorageException(f'Error downloading object, Response code {str(get_response.status)}')
             self.logger.debug(f'Writing object "{object_name}" to file "{file_name}"')
-            shutil.copyfileobj(response.data.raw, writer)
+            shutil.copyfileobj(get_response.data.raw, writer)
         return True
 
     def object_delete(self, namespace_name, bucket_name, object_name):
@@ -126,5 +127,5 @@ class OCIObjectStorageClient():
                                                             bucket_name,
                                                             object_name)
         if response.status != 204:
-            raise ObjectStorageException(f'Error deleting object: {str(response.status)}')
+            raise ObjectStorageException(f'Error deleting object, Reponse code {str(response.status)}')
         return True
