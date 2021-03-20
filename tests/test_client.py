@@ -90,8 +90,6 @@ def test_file_backup_overwrite(mocker):
         assert backup_list[0]['uploaded_md5_checksum'] != backup_list[1]['uploaded_md5_checksum']
 
 def test_file_restore(mocker):
-    random_data = utils.random_string()
-
     class MockOSGet():
         def __init__(self, *args, **kwargs):
             pass
@@ -100,7 +98,8 @@ def test_file_restore(mocker):
 
         def object_get(_namespace, _bucket, _object_name, file_name, **kwargs):
             with open(file_name, 'w') as writer:
-                writer.write(random_data)
+                # 'foo' encrypted
+                writer.write('07BzhNET7exJ6qYjitX/AA==')
             return True
 
     mocker.patch('backup_tool.client.OCIObjectStorageClient',
@@ -109,7 +108,7 @@ def test_file_restore(mocker):
         client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET)
         with utils.temp_file() as temp_file:
             with open(temp_file, 'w') as writer:
-                writer.write(random_data)
+                writer.write('foo')
             client.file_backup(temp_file)
 
         local_file = client.file_list()[0]

@@ -64,7 +64,8 @@ def decrypt_file(input_file, output_file, passphrase, offset):
     offset      :   Offset from original encryption
     '''
     cipher = AES.new(passphrase, AES.MODE_ECB)
-    hash_value = hashlib.md5()
+    original_hash_value = hashlib.md5()
+    decrypted_hash_value = hashlib.md5()
     with open(output_file, 'wb') as writer:
         with open(input_file, 'rb') as reader:
 
@@ -76,7 +77,9 @@ def decrypt_file(input_file, output_file, passphrase, offset):
                     break
                 if decoded_chunk is not None:
                     writer.write(decoded_chunk)
-                    hash_value.update(decoded_chunk)
+                    decrypted_hash_value.update(decoded_chunk)
+
+                original_hash_value.update(chunk)
                 decoded_bit = base64.b64decode(chunk)
                 decoded_chunk = cipher.decrypt(decoded_bit)
 
@@ -85,7 +88,8 @@ def decrypt_file(input_file, output_file, passphrase, offset):
                 decoded_chunk = decoded_chunk[:-offset]
             if decoded_chunk != b'' and decoded_chunk is not None:
                 writer.write(decoded_chunk)
-                hash_value.update(decoded_chunk)
+                decrypted_hash_value.update(decoded_chunk)
 
-    md5_value = codecs.encode(hash_value.digest(), 'base64')
-    return str(md5_value).rstrip("\\n'")[2:]
+    original_md5_value = str(codecs.encode(original_hash_value.digest(), 'base64')).rstrip("\\n'")[2:]
+    decrypted_md5_value = str(codecs.encode(decrypted_hash_value.digest(), 'base64')).rstrip("\\n'")[2:]
+    return original_md5_value, decrypted_md5_value

@@ -121,26 +121,25 @@ class BackupClient():
                                       backup_entry.uploaded_file_path, encrypted_file, set_restore=set_restore)
             self.logger.info(f'Downloaded of object {backup_entry.uploaded_file_path} complete, written to temp file "{encrypted_file}"')
 
-            # Check md5 matches expected
-            self.logger.debug(f'Checking md5 sum of temp file "{encrypted_file}"')
-            downloaded_md5 = utils.md5(encrypted_file)
-            self.logger.debug(f'Downloaded encrypted file "{encrypted_file}" has md5 sum {downloaded_md5}')
-            if backup_entry.uploaded_md5_checksum != downloaded_md5:
-                self.logger.error(f'Downloaded file "{encrypted_file}" has unexpected md5 {downloaded_md5}, '
-                                  f'expected {backup_entry.uploaded_md5_checksum}')
-                return True
-            self.logger.debug(f'Decrypting temp file "{encrypted_file}" to file "{local_file_path}"')
+            # Ensure dir of new decrypted file is created
             dir_name = os.path.dirname(local_file_path)
             if not os.path.isdir(dir_name):
                 os.makedirs(dir_name)
-            local_file_md5 = crypto.decrypt_file(encrypted_file, local_file_path, self.crypto_key,
-                                                 backup_entry.uploaded_encryption_offset)
+            self.logger.debug(f'Decrypting temp file "{encrypted_file}" to file "{local_file_path}"')
+            encrypted_file_md5, local_file_md5 = crypto.decrypt_file(encrypted_file,
+                                                                     local_file_path,
+                                                                     self.crypto_key,
+                                                                     backup_entry.uploaded_encryption_offset)
+            self.logger.debug(f'Decrypted file "{encrypted_file}" with md5 "{encrypted_file_md5}" to '
+                              f'file "{local_file_path}" with md5 "{local_file_path}"')
+            if backup_entry.uploaded_md5_checksum != encrypted_file_md5:
+                self.logger.error(f'Downloaded file "{encrypted_file}" has unexpected md5 {encrypted_file_md5}, '
+                                  f'expected {backup_entry.uploaded_md5_checksum}')
+                return False
 
-
-        self.logger.debug(f'Local file "{local_file_path}" has md5 sum {local_file_md5}')
-        if local_file_md5 != local_file.local_md5_checksum:
-            self.logger.error(f'MD5 {local_file_md5} of decrypted file "{local_file_path}" does not match expected {local_file.local_md5_checksum}')
-            return False
+            if local_file_md5 != local_file.local_md5_checksum:
+                self.logger.error(f'MD5 {local_file_md5} of decrypted file "{local_file_path}" does not match expected {local_file.local_md5_checksum}')
+                return False
         return True
 
 
@@ -172,9 +171,10 @@ class BackupClient():
         local_ouput_file    :   Full path of local ouptut file
         offset              :   Offset number to use in decryption
         '''
-        md5 = crypto.decrypt_file(local_input_file, local_output_file, self.crypto_key, offset)
-        self.logger.info(f'Derypted local file "{local_input_file}" to output file "{local_output_file}" with md5 {md5}')
-        return md5
+        original_md5, decrypted_md5 = crypto.decrypt_file(local_input_file, local_output_file, self.crypto_key, offset)
+        self.logger.info(f'Derypted local file "{local_input_file}" with md5 "{original_md5}" '
+                         f'to output file "{local_output_file}" with md5 {decrypted_md5}')
+        return {'original_md5': original_md5, 'decrypted_md5': decrypted_md5}
 
     def file_backup(self, local_file, overwrite=False, check_uploaded_md5=False):
         '''
