@@ -1,8 +1,8 @@
-from multiprocessing import Process, cpu_count
-import os
+import json
 import re
 import uuid
 
+from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -16,7 +16,7 @@ class BackupClient():
     Backup Client
     '''
     def __init__(self, database_file, crypto_key, oci_config_file, oci_config_section, oci_namespace, oci_bucket,
-                 logging_file=None, relative_path=None, threads=cpu_count() * 2):
+                 logging_file=None, relative_path=None, work_directory='/tmp/backup-tool'):
         '''
         Backup Client
 
@@ -27,9 +27,8 @@ class BackupClient():
         oci_namespace   :   OCI Object Storage Namespace
         oci_bucket      :   OCI Object Storage Bucket
         logging_file    :   Path for logging file
+        work_directory  :   Directory for temporary files to be written to
         relative_path   :   Where files should be placed relative to machine
-        threads         :   Number of threads to use during multiple uploads
-
         Relative path explanation:
         If relative path given as "/home/user"
 
@@ -56,12 +55,32 @@ class BackupClient():
         self.db_session = sessionmaker(bind=engine)()
 
         self.crypto_key = crypto_key
-        self.relative_path = relative_path
+        self.relative_path = None
+        if relative_path:
+            self.relative_path = Path(relative_path)
+
+        self.work_directory = Path(work_directory)
+        if not self.work_directory.exists():
+            self.work_directory.mkdir(parents=True)
+
+        # Keep files backed up in a cache file in the work directory
+        self.cache_file = self.work_directory / 'file_cache.json'
+        self.cache_json = {
+            'backup': [],
+            'restore': [],
+        }
 
         self.oci_namespace = oci_namespace
         self.oci_bucket = oci_bucket
         self.os_client = OCIObjectStorageClient(oci_config_file, oci_config_section, logger=self.logger)
-        self.cpu_threads = threads
+
+    def __enter__(self):
+        if self.cache_file.exists():
+            self.cache_json = json.loads(self.cache_file.read_text())
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.cache_file.write_text(json.dumps(self.cache_json))
 
     def _generate_uuid(self):
         '''
@@ -77,7 +96,7 @@ class BackupClient():
                 return object_path
             self.logger.warning(f'UUID "{object_path}" already in use, generating another')
 
-    def file_restore(self, local_file_id, overwrite=False, set_restore=False):
+    def file_restore(self, local_file_id, overwrite=False, set_restore=False): #pylint: disable=too-many-return-statements
         '''
         Restore file from object storage
 
@@ -101,45 +120,49 @@ class BackupClient():
         if not backup_entry:
             self.logger.error(f'Expecting backup entry {local_file.backup_entry_id} does not exist')
 
-        local_file_path = local_file.local_file_path
+        local_file_path = Path(local_file.local_file_path)
         if self.relative_path:
-            local_file_path = os.path.join(self.relative_path, local_file_path)
+            local_file_path = self.relative_path / local_file_path
 
-        if os.path.isfile(local_file_path):
-            self.logger.debug(f'Checking local file "{local_file_path}" md5')
-            local_file_md5 = utils.md5(local_file_path)
-            self.logger.debug(f'Local file "{local_file_path}" has md5 sum {local_file_md5}')
+        if local_file_path in self.cache_json['restore']:
+            self.logger.warning(f'Skipping {str(local_file_path)} as file is in cache')
+            return False
+
+        if local_file_path.is_file():
+            self.logger.debug(f'Checking local file "{str(local_file_path)}" md5')
+            local_file_md5 = utils.md5(str(local_file_path))
+            self.logger.debug(f'Local file "{str(local_file_path)}" has md5 sum {local_file_md5}')
             if local_file.local_md5_checksum == local_file_md5:
                 if not overwrite:
-                    self.logger.info(f'Local file "{local_file_path}" has expected md5 {local_file_md5}')
+                    self.logger.info(f'Local file "{str(local_file_path)}" has expected md5 {local_file_md5}')
                     return True
 
         # Write file to temp dir
-        with utils.temp_file() as encrypted_file:
-            self.logger.info(f'Downloading object {backup_entry.uploaded_file_path} to temp file "{encrypted_file}"')
+        with utils.temp_file(directory=self.work_directory) as encrypted_file:
+            self.logger.info(f'Downloading object {backup_entry.uploaded_file_path} to temp file "{str(encrypted_file)}"')
             self.os_client.object_get(self.oci_namespace, self.oci_bucket,
-                                      backup_entry.uploaded_file_path, encrypted_file, set_restore=set_restore)
-            self.logger.info(f'Downloaded of object {backup_entry.uploaded_file_path} complete, written to temp file "{encrypted_file}"')
+                                      backup_entry.uploaded_file_path, str(encrypted_file), set_restore=set_restore)
+            self.logger.info(f'Downloaded of object {backup_entry.uploaded_file_path} complete, written to temp file "{str(encrypted_file)}"')
 
             # Ensure dir of new decrypted file is created
-            dir_name = os.path.dirname(local_file_path)
-            if not os.path.isdir(dir_name):
-                os.makedirs(dir_name)
-            self.logger.debug(f'Decrypting temp file "{encrypted_file}" to file "{local_file_path}"')
-            encrypted_file_md5, local_file_md5 = crypto.decrypt_file(encrypted_file,
-                                                                     local_file_path,
+            if not local_file_path.parent.exists():
+                local_file_path.mkdir(parents=True)
+            self.logger.debug(f'Decrypting temp file "{str(encrypted_file)}" to file "{str(local_file_path)}"')
+            encrypted_file_md5, local_file_md5 = crypto.decrypt_file(str(encrypted_file),
+                                                                     str(local_file_path),
                                                                      self.crypto_key,
                                                                      backup_entry.uploaded_encryption_offset)
-            self.logger.debug(f'Decrypted file "{encrypted_file}" with md5 "{encrypted_file_md5}" to '
-                              f'file "{local_file_path}" with md5 "{local_file_path}"')
+            self.logger.debug(f'Decrypted file "{str(encrypted_file)}" with md5 "{encrypted_file_md5}" to '
+                              f'file "{str(local_file_path)}" with md5 "{local_file_md5}"')
             if backup_entry.uploaded_md5_checksum != encrypted_file_md5:
-                self.logger.error(f'Downloaded file "{encrypted_file}" has unexpected md5 {encrypted_file_md5}, '
+                self.logger.error(f'Downloaded file "{str(encrypted_file)}" has unexpected md5 {encrypted_file_md5}, '
                                   f'expected {backup_entry.uploaded_md5_checksum}')
                 return False
 
             if local_file_md5 != local_file.local_md5_checksum:
-                self.logger.error(f'MD5 {local_file_md5} of decrypted file "{local_file_path}" does not match expected {local_file.local_md5_checksum}')
+                self.logger.error(f'MD5 {local_file_md5} of decrypted file "{str(local_file_path)}" does not match expected {local_file.local_md5_checksum}')
                 return False
+            self.cache_json['restore'].append(str(local_file_path.resolve()))
         return True
 
 
@@ -186,7 +209,7 @@ class BackupClient():
         '''
         self._file_backup(local_file, overwrite=overwrite, check_uploaded_md5=check_uploaded_md5)
 
-    def _file_backup_file_exists(self, local_backup_file, local_file, local_file_md5, overwrite, check_uploaded_md5):
+    def _file_backup_file_exists(self, local_backup_file, local_file_path, local_file_md5, overwrite, check_uploaded_md5):
         '''
         Local backup of file exists
         '''
@@ -195,13 +218,13 @@ class BackupClient():
 
         self.logger.debug(f'Found existing local file: {local_backup_file.id}')
         if local_file_md5 == local_backup_file.local_md5_checksum:
-            self.logger.debug(f'Existing local file "{local_file}" has expected md5 {local_file_md5}')
+            self.logger.debug(f'Existing local file "{str(local_file_path)}" has expected md5 {local_file_md5}')
             # Only upload if no backup file exists
             # If requested, check that backup file matches encryption
             if local_backup_file.backup_entry_id is not None and check_uploaded_md5 is False:
                 upload_file = False
         else:
-            self.logger.debug(f'Existing local file "{local_file}" has unexpected md5 sum {local_file_md5}')
+            self.logger.debug(f'Existing local file "{str(local_file_path)}" has unexpected md5 sum {local_file_md5}')
             if overwrite is True:
                 local_backup_file.local_md5_checksum = local_file_md5
                 # Current file has no backup, so set this to null for now
@@ -209,7 +232,7 @@ class BackupClient():
                 self.db_session.commit()
                 self.logger.debug(f'Updated local file {local_backup_file.id} to checksum {local_file_md5}')
             else:
-                self.logger.warning(f'Overwrite set to false, not uploading new version of local file "{local_file}"')
+                self.logger.warning(f'Overwrite set to false, not uploading new version of local file "{str(local_file_path)}"')
                 upload_file = False
         return upload_file
 
@@ -231,8 +254,8 @@ class BackupClient():
         self.logger.info(f'No encrypted upload matching file with md5 {local_crypto_file_md5}, uploading copy')
         object_path = self._generate_uuid()
 
-        self.logger.debug(f'Uploading encrypted file "{crypto_file}" to object path {object_path}')
-        self.os_client.object_put(self.oci_namespace, self.oci_bucket, object_path, crypto_file,
+        self.logger.debug(f'Uploading encrypted file "{str(crypto_file)}" to object path {object_path}')
+        self.os_client.object_put(self.oci_namespace, self.oci_bucket, object_path, str(crypto_file),
                                   md5_sum=local_crypto_file_md5)
 
         backup_args = {
@@ -244,7 +267,7 @@ class BackupClient():
         backup_entry = BackupEntry(**backup_args)
         self.db_session.add(backup_entry)
         self.db_session.commit()
-        self.logger.info(f'Uploaded encrypted file "{crypto_file}" as backup entry {backup_entry.id}')
+        self.logger.info(f'Uploaded encrypted file "{str(crypto_file)}" as backup entry {backup_entry.id}')
 
         local_backup_file.backup_entry_id = backup_entry.id
         self.db_session.commit()
@@ -261,41 +284,38 @@ class BackupClient():
         '''
         # Use local file as the full path of the file
         # Use local file path as relative path for the database
-        local_file = os.path.abspath(local_file)
+        local_file_path = Path(local_file).resolve()
         if self.relative_path:
-            local_file_path = os.path.relpath(local_file, self.relative_path)
-        else:
-            local_file_path = local_file
-        self.logger.info(f'Backing up local file: "{local_file}"')
-        if local_file_path != local_file:
-            self.logger.debug(f'Using relative path for database "{local_file_path}"')
-
-        with utils.temp_file() as crypto_file:
-            self.logger.debug(f'Creating encrypted file "{crypto_file}" from file "{local_file}"')
-            offset, local_file_md5, local_crypto_file_md5 = crypto.encrypt_file(local_file, crypto_file, self.crypto_key)
-            self.logger.debug(f'Created encrypted file "{crypto_file}" with md5 "{local_crypto_file_md5}" '
-                              f' from original file "{local_file}" with md5 "{local_file_md5}"')
+            local_file_path = local_file_path.relative_to(self.relative_path)
+            self.logger.debug(f'Using relative path for database "{str(local_file_path)}"')
+        self.logger.info(f'Backing up local file: "{str(local_file_path)}"')
+        with utils.temp_file(directory=self.work_directory) as crypto_file:
+            self.logger.debug(f'Creating encrypted file "{str(crypto_file)}" from file "{str(local_file)}"')
+            offset, local_file_md5, local_crypto_file_md5 = crypto.encrypt_file(str(local_file), str(crypto_file), self.crypto_key)
+            self.logger.debug(f'Created encrypted file "{str(crypto_file)}" with md5 "{local_crypto_file_md5}" '
+                              f' from original file "{str(local_file)}" with md5 "{local_file_md5}"')
 
             local_backup_file = self.db_session.query(BackupEntryLocalFile).\
-                    filter(BackupEntryLocalFile.local_file_path == local_file_path).first()
+                    filter(BackupEntryLocalFile.local_file_path == str(local_file_path)).first()
             if local_backup_file:
-                upload_file = self._file_backup_file_exists(local_backup_file, local_file,
+                upload_file = self._file_backup_file_exists(local_backup_file, local_file_path,
                                                             local_file_md5, overwrite, check_uploaded_md5)
             else:
                 upload_file = True
-                self.logger.debug(f'No existing local file found for path: "{local_file}"')
+                self.logger.debug(f'No existing local file found for path: "{str(local_file_path)}"')
                 backup_file_args = {
-                    'local_file_path': local_file_path,
+                    'local_file_path': str(local_file_path),
                     'local_md5_checksum' : local_file_md5,
                 }
 
                 local_backup_file = BackupEntryLocalFile(**backup_file_args)
                 self.db_session.add(local_backup_file)
                 self.db_session.commit()
-                self.logger.info(f'Created database entry {local_backup_file.id} for local file "{local_file}"')
+                self.logger.info(f'Created database entry {local_backup_file.id} for local file "{str(local_file_path)}"')
 
             if upload_file:
                 return self._file_backup_upload(crypto_file, local_crypto_file_md5, offset, local_backup_file)
+            self.cache_json['backup'].append(str(local_file_path.resolve()))
             return True
 
     def file_duplicates(self):
@@ -320,20 +340,19 @@ class BackupClient():
             backup_file_duplicates.pop(backup)
         return backup_file_duplicates
 
-    def __directory_backup(self, file_list, overwrite, check_uploaded_md5):
-        for file_name in file_list:
-            self._file_backup(file_name, overwrite=overwrite, check_uploaded_md5=check_uploaded_md5)
-
     def directory_backup(self, dir_path, overwrite=False, check_uploaded_md5=False, skip_files=None): #pylint:disable=too-many-locals
         '''
-            Backup all files in directory
+        Backup all files in directory
 
-            local_file          :       Full path of local file
-            overwrite           :       Upload new file is md5 is changed
-            check_uploaded_md5  :       Ensure any existing backup file matches expected encryption
-            skip_files          :       List of regexes to ignore for backup
+        local_file          :       Full path of local file
+        overwrite           :       Upload new file is md5 is changed
+        check_uploaded_md5  :       Ensure any existing backup file matches expected encryption
+        skip_files          :       List of regexes to ignore for backup
         '''
-        directory_path = os.path.abspath(dir_path)
+        directory_path = Path(dir_path).resolve()
+        if not directory_path.exists():
+            self.logger.error(f'Unable to find directory {str(directory_path)}')
+            return
 
         # Make sure skip files is a string type
         if skip_files is None:
@@ -341,48 +360,29 @@ class BackupClient():
         elif isinstance(skip_files, str):
             skip_files = [skip_files]
 
-        # Add an empty list for each thread
-        file_lists = []
-        for _thread_num in range(self.cpu_threads):
-            file_lists.append([])
+        file_list = []
 
-        self.logger.info(f'Generating file list from directory "{directory_path}"')
-        for count, (dir_name, _, file_list) in enumerate(os.walk(directory_path)):
-            # Check if dir matches skip files
-            skip_dir = False
+        self.logger.info(f'Generating file list from directory "{str(directory_path)}"')
+        for file_name in directory_path.glob('**/*'):
+            # Skip if matches any continue
+            skip = False
             for skip_check in skip_files:
-                if re.match(skip_check, dir_name):
-                    self.logger.warning(f'Ignoring dir "{dir_name}" since matches skip check "{skip_check}"')
-                    skip_dir = True
+                if re.match(skip_check, str(file_name)):
+                    self.logger.warning(f'Ignoring file "{str(file_name)}" since matches skip check "{skip_check}"')
+                    skip = True
                     break
-            if skip_dir:
+            if skip:
                 continue
-            for file_name in file_list:
-                full_path = os.path.join(dir_name, file_name)
-                # Skip if matches any continue
-                skip = False
-                for skip_check in skip_files:
-                    if re.match(skip_check, full_path):
-                        self.logger.warning(f'Ignoring file "{full_path}" since matches skip check "{skip_check}"')
-                        skip = True
-                        break
-                if skip:
-                    continue
-                self.logger.debug(f'Adding file to backup queue "{full_path}"')
-                file_lists[count % self.cpu_threads].append(full_path)
+            if str(file_name) in self.cache_json['backup']:
+                self.logger.warning(f'Skipping backup of file {str(file_name)} as file is in cache')
+                continue
+            if file_name.is_dir():
+                continue
+            self.logger.debug(f'Adding file to backup queue "{str(file_name)}"')
+            file_list.append(file_name)
 
-
-        threads = []
-        for thread_num in range(self.cpu_threads):
-            self.logger.info(f'Starting thread number {thread_num}')
-            process = Process(target=self.__directory_backup,
-                              args=(file_lists[thread_num], overwrite, check_uploaded_md5))
-            process.start()
-            threads.append(process)
-
-        for process in threads:
-            self.logger.debug(f'Waiting for thread "{process.name}"')
-            process.join()
+        for file_name in file_list:
+            self._file_backup(str(file_name), overwrite=overwrite, check_uploaded_md5=check_uploaded_md5)
 
     def file_list(self):
         '''
@@ -402,19 +402,18 @@ class BackupClient():
         files_cleaned = []
 
         for local_file in self.db_session.query(BackupEntryLocalFile).all():
-            local_file_path = local_file.local_file_path
+            local_file_path = Path(local_file.local_file_path)
             if self.relative_path:
-                local_file_path = os.path.join(self.relative_path, local_file_path)
-            if not os.path.isfile(local_file_path):
-                self.logger.info(f'Local file {local_file.id} path "{local_file_path}" no longer present, removing from db')
+                local_file_path = self.relative_path / local_file_path
+            if not local_file_path.exists():
+                self.logger.info(f'Local file {local_file.id} path "{str(local_file_path)}" no longer present, removing from db')
                 if not dry_run:
                     self.db_session.query(BackupEntryLocalFile).filter_by(id=local_file.id).delete()
                 files_cleaned.append(local_file.id)
             else:
-                self.logger.debug(f'Local file {local_file.id} path "{local_file_path}" exists, skipping')
+                self.logger.debug(f'Local file {local_file.id} path "{str(local_file_path)}" exists, skipping')
         self.db_session.commit()
         return files_cleaned
-
 
     def backup_list(self):
         '''

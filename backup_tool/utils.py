@@ -3,9 +3,10 @@ from contextlib import contextmanager
 import hashlib
 import logging
 from logging.handlers import RotatingFileHandler
-import os
 import random
 import string
+
+from pathlib import Path
 
 def random_string(length=32, prefix='', suffix=''):
     '''
@@ -20,21 +21,29 @@ def random_string(length=32, prefix='', suffix=''):
     return f'{prefix}{generated}{suffix}'
 
 @contextmanager
-def temp_file(name=None, suffix='', delete=True):
+def temp_file(name=None, directory='/tmp/', suffix='', delete=True):
     '''
     Create temporary file
 
-    name    :   Name of temporary file
-    suffix  :   Suffix for temporary file name ( not used if name passed )
-    delete  :   Delete file after use
+    name        :   Name of temporary file
+    directory   :   Directory for temporary files
+    suffix      :   Suffix for temporary file name ( not used if name passed )
+    delete      :   Delete file after use
     '''
+    file_path = None
+    directory = Path(directory)
+    if not directory.exists():
+        directory.mkdir(parents=True)
     if not name:
-        name = random_string(prefix='/tmp/', suffix=suffix)
+        file_path = directory / random_string(suffix=suffix)
     try:
-        yield name
+        if file_path:
+            yield Path(file_path)
+        else:
+            yield None
     finally:
-        if delete and os.path.exists(name):
-            os.remove(name)
+        if delete and file_path and file_path.exists():
+            file_path.unlink()
 
 def md5(input_file):
     '''

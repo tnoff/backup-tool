@@ -33,7 +33,7 @@ class ClientCLI():
         with open(key_file, 'r') as key_reader:
             crypto_key = key_reader.read().strip()
 
-        self.client = BackupClient(kwargs.pop('database_file'),
+        with BackupClient(kwargs.pop('database_file'),
                                    crypto_key,
                                    kwargs.pop('config_file'),
                                    kwargs.pop('config_stage'),
@@ -41,13 +41,13 @@ class ClientCLI():
                                    kwargs.pop('bucket_name'),
                                    logging_file=kwargs.pop('log_file'),
                                    relative_path=kwargs.pop('relative_path'),
-                                   )
-
-        command = getattr(self.client,
-                          "%s_%s" % (kwargs.pop('module'), kwargs.pop('command')))
-        value = command(**kwargs)
-        if value is not None:
-            print(json.dumps(value, indent=4))
+                                   work_directory=kwargs.pop('work_directory')
+                                   ) as self.client:
+            command = getattr(self.client,
+                            "%s_%s" % (kwargs.pop('module'), kwargs.pop('command')))
+            value = command(**kwargs)
+            if value is not None:
+                print(json.dumps(value, indent=4))
 
 def parse_args(args): #pylint:disable=too-many-locals,too-many-statements
     '''
@@ -71,6 +71,8 @@ def parse_args(args): #pylint:disable=too-many-locals,too-many-statements
                         help="Object storage namespace")
     parser.add_argument("-b", "--bucket-name",
                         help="Object storage bucket")
+    parser.add_argument('-w', '--work-directory',
+                        help='Work directory for temp files')
 
 
     # Sub parsers
