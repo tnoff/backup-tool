@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import re
 import sys
+from tempfile import TemporaryDirectory
 
 from backup_tool.exception import CLIException
 from backup_tool.client import BackupClient
@@ -25,6 +26,8 @@ class ClientCLI():
         if key_file_path.exists():
             crypto_key = key_file_path.read_text().strip()
 
+        self.temporary_directory = TemporaryDirectory() #pylint:disable=consider-using-with
+
         client_kwargs = {
             'database_file': kwargs.pop('database_file', None),
             'crypto_key': crypto_key,
@@ -32,9 +35,9 @@ class ClientCLI():
             'oci_config_section': kwargs.pop('oci_config_section', None),
             'oci_namespace': kwargs.pop('oci_namespace', None),
             'oci_bucket': kwargs.pop('oci_bucket', None),
+            'work_directory': kwargs.pop('work_directory', self.temporary_directory.name),
             'logging_file': kwargs.pop('logging_file', None),
             'relative_path': kwargs.pop('relative_path', None),
-            'work_directory': kwargs.pop('work_directory', None)
         }
 
         self.client = BackupClient(**client_kwargs)
@@ -55,6 +58,11 @@ class ClientCLI():
     def __exit__(self, exc_type, exc_value, exc_traceback):
         if self.cache_file and self.cache_json:
             self.cache_file.write_text(json.dumps(self.cache_json))
+        temp_dir_path = Path(self.temporary_directory.name)
+        for child in temp_dir_path.glob('*'):
+            if child.is_file():
+                child.unlink()
+        temp_dir_path.rmdir()
 
     def run_command(self):
         '''

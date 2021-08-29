@@ -14,7 +14,7 @@ class BackupClient():
     Backup Client
     '''
     def __init__(self, database_file, crypto_key, oci_config_file, oci_config_section, oci_namespace, oci_bucket,
-                 logging_file=None, relative_path=None, work_directory='/tmp/backup-tool'):
+                 work_directory, logging_file=None, relative_path=None):
         '''
         Backup Client
 
@@ -177,16 +177,6 @@ class BackupClient():
                          f'to output file "{local_output_file}" with md5 {decrypted_md5}')
         return {'original_md5': original_md5, 'decrypted_md5': decrypted_md5}
 
-    def file_backup(self, local_file, overwrite=False, check_uploaded_md5=False):
-        '''
-        Backup file to object storage
-
-        local_file          :       Full path of local file
-        overwrite           :       Upload new file is md5 is changed
-        check_uploaded_md5  :       Ensure any existing backup file matches expected encryption
-        '''
-        self._file_backup(local_file, overwrite=overwrite, check_uploaded_md5=check_uploaded_md5)
-
     def _file_backup_file_exists(self, local_backup_file, local_file_path, local_file_md5, overwrite, check_uploaded_md5):
         '''
         Local backup of file exists
@@ -252,7 +242,7 @@ class BackupClient():
         self.logger.info(f'Updated local backup {local_backup_file.id} to match backup entry {backup_entry.id}')
         return True
 
-    def _file_backup(self, local_file, overwrite=False, check_uploaded_md5=False):
+    def file_backup(self, local_file, overwrite=False, check_uploaded_md5=False):
         '''
         Backup file to object storage
 
