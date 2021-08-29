@@ -1,23 +1,16 @@
-#!/usr/bin/env python
 from configparser import NoSectionError, NoOptionError, SafeConfigParser
 import json
 import os
+from pathlib import Path
+import re
 import sys
 
 from backup_tool.exception import CLIException
 from backup_tool.client import BackupClient
 from backup_tool.cli.common import CommonArgparse
 
-DEFAULT_CONFIG_PATH = os.path.join(os.path.expanduser('~'),
-                                   '.oci',
-                                   'config')
-
-DEFAULT_CLIENT_PATH = os.path.join(os.path.expanduser('~'), '.backup-tool')
-
-if not os.path.isdir(DEFAULT_CLIENT_PATH):
-    os.makedirs(DEFAULT_CLIENT_PATH)
-
-DEFAULT_SETTINGS_FILE = os.path.join(DEFAULT_CLIENT_PATH, 'config')
+HOME_PATH = Path(os.path.expanduser('~'))
+DEFAULT_SETTINGS_FILE = HOME_PATH/ '.backup-tool' / 'config'
 
 
 class ClientCLI():
@@ -28,33 +21,113 @@ class ClientCLI():
         '''
         Backup Client
         '''
-        # Read crytpo key from file
-        key_file = kwargs.pop('crypto_key_file')
-        with open(key_file, 'r') as key_reader:
-            crypto_key = key_reader.read().strip()
+        crypto_key = None
+        key_file_path = Path(kwargs.pop('crypto_key_file', ''))
+        if key_file_path.exists():
+            crypto_key = key_file_path.read_text().strip()
 
-        with BackupClient(kwargs.pop('database_file'),
-                                   crypto_key,
-                                   kwargs.pop('config_file'),
-                                   kwargs.pop('config_stage'),
-                                   kwargs.pop('namespace'),
-                                   kwargs.pop('bucket_name'),
-                                   logging_file=kwargs.pop('log_file'),
-                                   relative_path=kwargs.pop('relative_path'),
-                                   work_directory=kwargs.pop('work_directory')
-                                   ) as self.client:
-            command = getattr(self.client,
-                            "%s_%s" % (kwargs.pop('module'), kwargs.pop('command')))
-            value = command(**kwargs)
-            if value is not None:
-                print(json.dumps(value, indent=4))
+        client_kwargs = {
+            'database_file': kwargs.pop('database_file', None),
+            'crypto_key': crypto_key,
+            'oci_config_file': kwargs.pop('config_file', None),
+            'oci_config_section': kwargs.pop('config_stage', None),
+            'oci_namespace': kwargs.pop('namespace', None),
+            'oci_bucket': kwargs.pop('bucket_name', None),
+            'logging_file': kwargs.pop('log_file', None),
+            'relative_path': kwargs.pop('relative_path', None),
+            'work_directory': kwargs.pop('work_directory', None)
+        }
+
+        self.client = BackupClient(**client_kwargs)
+        self.command_str = f'{kwargs.pop("module")}_{kwargs.pop("command")}'
+        self.additional_kwargs = kwargs
+        # Cache file may be given later in some functions
+        self.cache_file = None
+        self.cache_json = {
+            'backup': {
+                'pending': [],
+                'processed': [],
+            },
+        }
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        if self.cache_file and self.cache_json:
+            self.cache_file.write_text(json.dumps(self.cache_json))
+
+    def run_command(self):
+        '''
+        Run command given in kwargs
+        '''
+        try:
+            command = getattr(self, self.command_str)
+        except AttributeError:
+            command = getattr(self.client, self.command_str)
+        value = command(**self.additional_kwargs)
+        if value is not None:
+            print(json.dumps(value, indent=4))
+
+    def directory_backup(self, dir_path, overwrite=False,
+                        check_uploaded_md5=False, skip_files=None,
+                        cache_file=None):
+        '''
+        Backup all files in directory
+
+        local_file          :       Full path of local file
+        overwrite           :       Upload new file is md5 is changed
+        check_uploaded_md5  :       Ensure any existing backup file matches expected encryption
+        skip_files          :       List of regexes to ignore for backup
+        cache_file          :       Cache File Location, will use default in work directory otherwise
+        '''
+        # Read cached information if its there
+        self.cache_file = cache_file or self.client.work_directory / 'cache_file.json'
+        if self.cache_file.exists():
+            self.cache_json = json.loads(self.cache_file.read_text())
+
+        directory_path = Path(dir_path).resolve()
+        if not directory_path.exists():
+            self.client.logger.error(f'Unable to find directory {str(directory_path)}')
+            return
+
+        # Make sure skip files is a string type
+        if skip_files is None:
+            skip_files = []
+        elif isinstance(skip_files, str):
+            skip_files = [skip_files]
+
+        file_list = []
+
+        self.client.logger.info(f'Generating file list from directory "{str(directory_path)}"')
+        for file_name in directory_path.glob('**/*'):
+            # Skip if matches any continue
+            skip = False
+            for skip_check in skip_files:
+                if re.match(skip_check, str(file_name)):
+                    self.client.logger.warning(f'Ignoring file "{str(file_name)}" since matches skip check "{skip_check}"')
+                    skip = True
+                    break
+            if skip:
+                continue
+            if str(file_name) in self.cache_json['backup']['processed']:
+                self.client.logger.warning(f'Ignoring file "{str(file_name)}" as it is in cache')
+                continue
+            if file_name.is_dir():
+                continue
+            self.client.logger.debug(f'Adding file to backup queue "{str(file_name)}"')
+            file_list.append(file_name)
+
+        for file_name in file_list:
+            self.client.file_backup(str(file_name), overwrite=overwrite, check_uploaded_md5=check_uploaded_md5)
+            self.cache_json['backup']['processed'].append(str(file_name))
 
 def parse_args(args): #pylint:disable=too-many-locals,too-many-statements
     '''
     Parse command line args
     '''
     parser = CommonArgparse(description="Client CLI")
-    parser.add_argument("-s", "--settings-file", default=DEFAULT_SETTINGS_FILE,
+    parser.add_argument("-s", "--settings-file", default=str(DEFAULT_SETTINGS_FILE),
                         help="Settings file")
 
     parser.add_argument("-c", "--config-file",
@@ -140,6 +213,7 @@ def parse_args(args): #pylint:disable=too-many-locals,too-many-statements
     dir_backup.add_argument("--overwrite", "-o", action="store_true", help="Overwrite copy in database")
     dir_backup.add_argument("--check-uploaded-md5", "-c", action="store_true", help="Check uploaded md5 matches expected")
     dir_backup.add_argument("--skip-files", "-s", nargs="+", help="Skip files matching regexes")
+    dir_backup.add_argument('--cache-file', help='Cache file to use for directory backup')
 
     # Final Steps
     parsed_args = vars(parser.parse_args(args))
@@ -170,7 +244,7 @@ def load_settings(settings_file):
         'config_file' : ['oci', 'config_file'],
         'config_stage' : ['oci', 'config_stage'],
     }
-    return_data = dict()
+    return_data = {}
     for key_name, args in mapping.items():
         try:
             value = parser.get(*args)
@@ -205,6 +279,7 @@ def main():
     '''
     try:
         args = generate_args(sys.argv[1:])
-        ClientCLI(**args)
+        with ClientCLI(**args) as client_cli:
+            client_cli.run_command()
     except CLIException as error:
         print(str(error))

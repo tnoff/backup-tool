@@ -1,5 +1,3 @@
-import json
-import re
 import uuid
 
 from pathlib import Path
@@ -63,24 +61,9 @@ class BackupClient():
         if not self.work_directory.exists():
             self.work_directory.mkdir(parents=True)
 
-        # Keep files backed up in a cache file in the work directory
-        self.cache_file = self.work_directory / 'file_cache.json'
-        self.cache_json = {
-            'backup': [],
-            'restore': [],
-        }
-
         self.oci_namespace = oci_namespace
         self.oci_bucket = oci_bucket
         self.os_client = OCIObjectStorageClient(oci_config_file, oci_config_section, logger=self.logger)
-
-    def __enter__(self):
-        if self.cache_file.exists():
-            self.cache_json = json.loads(self.cache_file.read_text())
-        return self
-
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        self.cache_file.write_text(json.dumps(self.cache_json))
 
     def _generate_uuid(self):
         '''
@@ -124,10 +107,6 @@ class BackupClient():
         if self.relative_path:
             local_file_path = self.relative_path / local_file_path
 
-        if local_file_path in self.cache_json['restore']:
-            self.logger.warning(f'Skipping {str(local_file_path)} as file is in cache')
-            return False
-
         if local_file_path.is_file():
             self.logger.debug(f'Checking local file "{str(local_file_path)}" md5')
             local_file_md5 = utils.md5(str(local_file_path))
@@ -162,7 +141,6 @@ class BackupClient():
             if local_file_md5 != local_file.local_md5_checksum:
                 self.logger.error(f'MD5 {local_file_md5} of decrypted file "{str(local_file_path)}" does not match expected {local_file.local_md5_checksum}')
                 return False
-            self.cache_json['restore'].append(str(local_file_path.resolve()))
         return True
 
 
@@ -315,7 +293,6 @@ class BackupClient():
 
             if upload_file:
                 return self._file_backup_upload(crypto_file, local_crypto_file_md5, offset, local_backup_file)
-            self.cache_json['backup'].append(str(local_file_path.resolve()))
             return True
 
     def file_duplicates(self):
@@ -339,50 +316,6 @@ class BackupClient():
         for backup in single_backups:
             backup_file_duplicates.pop(backup)
         return backup_file_duplicates
-
-    def directory_backup(self, dir_path, overwrite=False, check_uploaded_md5=False, skip_files=None): #pylint:disable=too-many-locals
-        '''
-        Backup all files in directory
-
-        local_file          :       Full path of local file
-        overwrite           :       Upload new file is md5 is changed
-        check_uploaded_md5  :       Ensure any existing backup file matches expected encryption
-        skip_files          :       List of regexes to ignore for backup
-        '''
-        directory_path = Path(dir_path).resolve()
-        if not directory_path.exists():
-            self.logger.error(f'Unable to find directory {str(directory_path)}')
-            return
-
-        # Make sure skip files is a string type
-        if skip_files is None:
-            skip_files = []
-        elif isinstance(skip_files, str):
-            skip_files = [skip_files]
-
-        file_list = []
-
-        self.logger.info(f'Generating file list from directory "{str(directory_path)}"')
-        for file_name in directory_path.glob('**/*'):
-            # Skip if matches any continue
-            skip = False
-            for skip_check in skip_files:
-                if re.match(skip_check, str(file_name)):
-                    self.logger.warning(f'Ignoring file "{str(file_name)}" since matches skip check "{skip_check}"')
-                    skip = True
-                    break
-            if skip:
-                continue
-            if str(file_name) in self.cache_json['backup']:
-                self.logger.warning(f'Skipping backup of file {str(file_name)} as file is in cache')
-                continue
-            if file_name.is_dir():
-                continue
-            self.logger.debug(f'Adding file to backup queue "{str(file_name)}"')
-            file_list.append(file_name)
-
-        for file_name in file_list:
-            self._file_backup(str(file_name), overwrite=overwrite, check_uploaded_md5=check_uploaded_md5)
 
     def file_list(self):
         '''
