@@ -21,13 +21,13 @@ def random_string(length=32, prefix='', suffix=''):
     return f'{prefix}{generated}{suffix}'
 
 @contextmanager
-def temp_file(name=None, directory='/tmp/', suffix='', delete=True):
+def temp_file(directory, name=None, suffix='', delete=True):
     '''
     Create temporary file
 
     name        :   Name of temporary file
     directory   :   Directory for temporary files
-    suffix      :   Suffix for temporary file name ( not used if name passed )
+    suffix      :   Suffix for temporary file name ( not used if name given )
     delete      :   Delete file after use
     '''
     file_path = None
@@ -36,6 +36,8 @@ def temp_file(name=None, directory='/tmp/', suffix='', delete=True):
         directory.mkdir(parents=True)
     if not name:
         file_path = directory / random_string(suffix=suffix)
+    else:
+        file_path = directory / name
     try:
         if file_path:
             yield Path(file_path)

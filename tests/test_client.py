@@ -26,11 +26,11 @@ class MockOSClient():
 def test_object_list(mocker):
     mocker.patch('backup_tool.client.OCIObjectStorageClient',
                  return_value=MockOSClient)
-    with utils.temp_file(suffix='.sql') as temp_db:
-        with TemporaryDirectory() as temp_dir:
-            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, temp_dir)
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir, suffix='.sql') as temp_db:
+            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
             # Open file and write
-            with utils.temp_file() as temp_file:
+            with utils.temp_file(tmp_dir) as temp_file:
                 with open(temp_file, 'w') as writer:
                     writer.write(utils.random_string(length=124))
                 client.file_backup(temp_file)
@@ -45,17 +45,17 @@ def test_object_list(mocker):
 def test_file_backup_same_md5s(mocker):
     mocker.patch('backup_tool.client.OCIObjectStorageClient',
                  return_value=MockOSClient)
-    with utils.temp_file(suffix='.sql') as temp_db:
-        with TemporaryDirectory() as temp_dir:
-            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, temp_dir)
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir, suffix='.sql') as temp_db:
+            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
             randomish_string = utils.random_string()
             # Write same file and upload twice
-            with utils.temp_file() as temp_file1:
+            with utils.temp_file(tmp_dir) as temp_file1:
                 with open(temp_file1, 'w') as writer:
                     writer.write(randomish_string)
                 client.file_backup(temp_file1)
 
-                with utils.temp_file() as temp_file2:
+                with utils.temp_file(tmp_dir) as temp_file2:
                     with open(temp_file2, 'w') as writer:
                         writer.write(randomish_string)
                     client.file_backup(temp_file2)
@@ -71,10 +71,10 @@ def test_file_backup_same_md5s(mocker):
 def test_file_backup_overwrite(mocker):
     mocker.patch('backup_tool.client.OCIObjectStorageClient',
                  return_value=MockOSClient)
-    with utils.temp_file(suffix='.sql') as temp_db:
-        with TemporaryDirectory() as temp_dir:
-            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, temp_dir)
-            with utils.temp_file() as temp_file:
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir, suffix='.sql') as temp_db:
+            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
+            with utils.temp_file(tmp_dir) as temp_file:
                 with open(temp_file, 'w') as writer:
                     writer.write(utils.random_string(length=20))
                 client.file_backup(temp_file)
@@ -108,10 +108,10 @@ def test_file_restore(mocker):
 
     mocker.patch('backup_tool.client.OCIObjectStorageClient',
                  return_value=MockOSGet)
-    with utils.temp_file(suffix='.sql') as temp_db:
-        with TemporaryDirectory() as temp_dir:
-            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, temp_dir)
-            with utils.temp_file() as temp_file:
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir, suffix='.sql') as temp_db:
+            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
+            with utils.temp_file(tmp_dir) as temp_file:
                 with open(temp_file, 'w') as writer:
                     writer.write('foo')
                 client.file_backup(temp_file)
@@ -122,22 +122,22 @@ def test_file_restore(mocker):
             assert os.path.isfile(local_file['local_file_path']) == False
 
             # Attempt to download file again, will fail if md5 doesnt match
-            with utils.temp_file(name=local_file['local_file_path']) as temp_file:
+            with utils.temp_file(tmp_dir, name=local_file['local_file_path']) as temp_file:
                 client.file_restore(local_file['id'])
 
 def test_file_encrypt(mocker):
     mocker.patch('backup_tool.client.OCIObjectStorageClient',
                  return_value=MockOSClient)
-    with utils.temp_file(suffix='.sql') as temp_db:
-        with TemporaryDirectory() as temp_dir:
-            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, temp_dir)
-            with utils.temp_file() as temp_file_input:
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir, suffix='.sql') as temp_db:
+            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
+            with utils.temp_file(tmp_dir) as temp_file_input:
                 # Write some dummy data to file
                 with open(temp_file_input, 'w') as writer:
                     writer.write('1234567890123456')
-                with utils.temp_file() as temp_file_output:
+                with utils.temp_file(tmp_dir) as temp_file_output:
                     client = BackupClient(temp_db, FAKE_CRYPTO_KEY, FAKE_CONFIG, FAKE_SECTION,
-                                        FAKE_NAMESPACE, FAKE_BUCKET, temp_dir)
+                                        FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
 
                     result = client.file_encrypt(temp_file_input, temp_file_output)
                     assert result['offset'] == 0
@@ -149,14 +149,14 @@ def test_file_encrypt(mocker):
 def test_file_decrypt(mocker):
     mocker.patch('backup_tool.client.OCIObjectStorageClient',
                  return_value=MockOSClient)
-    with utils.temp_file(suffix='.sql') as temp_db:
-        with TemporaryDirectory() as temp_dir:
-            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, temp_dir)
-            with utils.temp_file() as temp_file_input:
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir, suffix='.sql') as temp_db:
+            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
+            with utils.temp_file(tmp_dir) as temp_file_input:
                 # Write some dummy data to file
                 with open(temp_file_input, 'w') as writer:
                     writer.write('dXzNDNxckOrb7uz2ON0AAA==')
-                with utils.temp_file() as temp_file_output:
+                with utils.temp_file(tmp_dir) as temp_file_output:
                     client.file_decrypt(temp_file_input, temp_file_output, 0)
 
                     with open(temp_file_output, 'r') as reader:
@@ -166,11 +166,11 @@ def test_file_decrypt(mocker):
 def test_file_cleanup(mocker):
     mocker.patch('backup_tool.client.OCIObjectStorageClient',
                  return_value=MockOSClient)
-    with utils.temp_file(suffix='.sql') as temp_db:
-        with TemporaryDirectory() as temp_dir:
-            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, temp_dir)
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir, suffix='.sql') as temp_db:
+            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
             # First upload temp file
-            with utils.temp_file() as temp_file:
+            with utils.temp_file(tmp_dir) as temp_file:
                 with open(temp_file, 'w') as writer:
                     writer.write(utils.random_string(length=20))
                 client.file_backup(temp_file)
@@ -189,11 +189,11 @@ def test_file_cleanup(mocker):
 def test_backup_cleanup(mocker):
     mocker.patch('backup_tool.client.OCIObjectStorageClient',
                  return_value=MockOSClient)
-    with utils.temp_file(suffix='.sql') as temp_db:
-        with TemporaryDirectory() as temp_dir:
-            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, temp_dir)
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir, suffix='.sql') as temp_db:
+            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
             # First upload temp file
-            with utils.temp_file() as temp_file:
+            with utils.temp_file(tmp_dir) as temp_file:
                 with open(temp_file, 'w') as writer:
                     writer.write(utils.random_string(length=20))
                 client.file_backup(temp_file)
@@ -215,17 +215,17 @@ def test_backup_cleanup(mocker):
 def test_file_duplicates(mocker):
     mocker.patch('backup_tool.client.OCIObjectStorageClient',
                  return_value=MockOSClient)
-    with utils.temp_file(suffix='.sql') as temp_db:
-        with TemporaryDirectory() as temp_dir:
-            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, temp_dir)
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir, suffix='.sql') as temp_db:
+            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
             # First upload temp file
-            with utils.temp_file() as temp_file:
+            with utils.temp_file(tmp_dir) as temp_file:
                 with open(temp_file, 'w') as writer:
                     writer.write('abc')
                 client.file_backup(temp_file)
 
             # Upload temp file of same data
-            with utils.temp_file() as temp_file:
+            with utils.temp_file(tmp_dir) as temp_file:
                 with open(temp_file, 'w') as writer:
                     writer.write('abc')
                 client.file_backup(temp_file)
@@ -245,4 +245,3 @@ def test_file_duplicates(mocker):
             assert len(keys) == 1
 
             assert len(duplicates[keys[0]]) == 2
-

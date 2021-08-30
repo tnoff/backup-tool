@@ -117,7 +117,7 @@ class BackupClient():
                     return True
 
         # Write file to temp dir
-        with utils.temp_file(directory=self.work_directory) as encrypted_file:
+        with utils.temp_file(self.work_directory) as encrypted_file:
             self.logger.info(f'Downloading object {backup_entry.uploaded_file_path} to temp file "{str(encrypted_file)}"')
             self.os_client.object_get(self.oci_namespace, self.oci_bucket,
                                       backup_entry.uploaded_file_path, str(encrypted_file), set_restore=set_restore)
@@ -257,7 +257,7 @@ class BackupClient():
             local_file_path = local_file_path.relative_to(self.relative_path)
             self.logger.debug(f'Using relative path for database "{str(local_file_path)}"')
         self.logger.info(f'Backing up local file: "{str(local_file_path)}"')
-        with utils.temp_file(directory=self.work_directory) as crypto_file:
+        with utils.temp_file(self.work_directory) as crypto_file:
             self.logger.debug(f'Creating encrypted file "{str(crypto_file)}" from file "{str(local_file)}"')
             offset, local_file_md5, local_crypto_file_md5 = crypto.encrypt_file(str(local_file), str(crypto_file), self.crypto_key)
             self.logger.debug(f'Created encrypted file "{str(crypto_file)}" with md5 "{local_crypto_file_md5}" '

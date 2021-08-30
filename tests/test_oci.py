@@ -1,6 +1,6 @@
 import os
-import unittest
 import pytest
+from tempfile import TemporaryDirectory
 
 import oci
 from oci.exceptions import ServiceError
@@ -112,33 +112,34 @@ def test_object_list_raise_exception(mocker):
 
 def test_object_get(mocker):
     test_data = '01234'
-    with utils.temp_file() as input_file:
-        with open(input_file, 'w') as writer:
-            writer.write(test_data)
-        with open(input_file, 'rb') as reader:
-            class MockRawRequest():
-                def __init__(self):
-                    self.raw = reader
-            class MockOCI():
-                def __init__(self, *args, **kwargs):
-                    pass
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir) as input_file:
+            with open(input_file, 'w') as writer:
+                writer.write(test_data)
+            with open(input_file, 'rb') as reader:
+                class MockRawRequest():
+                    def __init__(self):
+                        self.raw = reader
+                class MockOCI():
+                    def __init__(self, *args, **kwargs):
+                        pass
 
-                def get_object(self, *args, **kwargs):
-                    return MockResponse(200, MockRawRequest())
+                    def get_object(self, *args, **kwargs):
+                        return MockResponse(200, MockRawRequest())
 
-            mocker.patch('backup_tool.oci_client.from_file',
-                         return_value='')
-            mocker.patch('backup_tool.oci_client.ObjectStorageClient',
-                         return_value=MockOCI)
-            mocker.patch('backup_tool.oci_client.to_dict',
-                         side_effect=to_dict_mock)
-            client = OCIObjectStorageClient(FAKE_CONFIG, FAKE_SECTION)
-            # Make sure to pass page limit of 1
-            with utils.temp_file() as temp_file:
-                objects = client.object_get(FAKE_NAMESPACE, FAKE_BUCKET,
-                                            'some-object-name', temp_file)
-                md5 = utils.md5(temp_file)
-                assert md5 == 'QQDE1E2pF3JH5EpfwVRneA=='
+                mocker.patch('backup_tool.oci_client.from_file',
+                            return_value='')
+                mocker.patch('backup_tool.oci_client.ObjectStorageClient',
+                            return_value=MockOCI)
+                mocker.patch('backup_tool.oci_client.to_dict',
+                            side_effect=to_dict_mock)
+                client = OCIObjectStorageClient(FAKE_CONFIG, FAKE_SECTION)
+                # Make sure to pass page limit of 1
+                with utils.temp_file(tmp_dir) as temp_file:
+                    objects = client.object_get(FAKE_NAMESPACE, FAKE_BUCKET,
+                                                'some-object-name', temp_file)
+                    md5 = utils.md5(temp_file)
+                    assert md5 == 'QQDE1E2pF3JH5EpfwVRneA=='
 
 def test_object_get_invalid_status(mocker):
     class MockOCI():
@@ -156,11 +157,12 @@ def test_object_get_invalid_status(mocker):
                  side_effect=to_dict_mock)
     client = OCIObjectStorageClient(FAKE_CONFIG, FAKE_SECTION)
     # Make sure to pass page limit of 1
-    with utils.temp_file() as temp_file:
-        with pytest.raises(ObjectStorageException) as error:
-            client.object_get(FAKE_NAMESPACE, FAKE_BUCKET,
-                              'some-object-name', temp_file)
-    assert str(error.value) == 'Error downloading object, Response code 400'
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir) as temp_file:
+            with pytest.raises(ObjectStorageException) as error:
+                client.object_get(FAKE_NAMESPACE, FAKE_BUCKET,
+                                'some-object-name', temp_file)
+        assert str(error.value) == 'Error downloading object, Response code 400'
 
 def test_object_get_restore(mocker):
     class MockOCI():
@@ -181,9 +183,10 @@ def test_object_get_restore(mocker):
                  side_effect=to_dict_mock)
     client = OCIObjectStorageClient(FAKE_CONFIG, FAKE_SECTION)
     # Make sure to pass page limit of 1
-    with utils.temp_file() as temp_file:
-        client.object_get(FAKE_NAMESPACE, FAKE_BUCKET,
-                          'some-object-name', temp_file, set_restore=True)
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir) as temp_file:
+            client.object_get(FAKE_NAMESPACE, FAKE_BUCKET,
+                            'some-object-name', temp_file, set_restore=True)
 
 def test_object_get_restore_invalid_status(mocker):
     class MockOCI():
@@ -204,11 +207,12 @@ def test_object_get_restore_invalid_status(mocker):
                  side_effect=to_dict_mock)
     client = OCIObjectStorageClient(FAKE_CONFIG, FAKE_SECTION)
     # Make sure to pass page limit of 1
-    with utils.temp_file() as temp_file:
-        with pytest.raises(ObjectStorageException) as error:
-            client.object_get(FAKE_NAMESPACE, FAKE_BUCKET,
-                              'some-object-name', temp_file, set_restore=True)
-    assert str(error.value) == 'Error restoring object, Response code 400'
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir) as temp_file:
+            with pytest.raises(ObjectStorageException) as error:
+                client.object_get(FAKE_NAMESPACE, FAKE_BUCKET,
+                                'some-object-name', temp_file, set_restore=True)
+        assert str(error.value) == 'Error restoring object, Response code 400'
 
 #
 # Object Delete Tests
@@ -271,10 +275,11 @@ def test_object_put(mocker):
                  side_effect=to_dict_mock)
     client = OCIObjectStorageClient(FAKE_CONFIG, FAKE_SECTION)
     fake_data = utils.random_string()
-    with utils.temp_file() as temp_file:
-        with open(temp_file, 'w+') as writer:
-            writer.write(fake_data)
-            client.object_put(FAKE_NAMESPACE, FAKE_BUCKET, 'some-object-name', temp_file)
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir) as temp_file:
+            with open(temp_file, 'w+') as writer:
+                writer.write(fake_data)
+                client.object_put(FAKE_NAMESPACE, FAKE_BUCKET, 'some-object-name', temp_file)
 
 def test_object_put_invalid_status(mocker):
     class MockOCI():
@@ -295,9 +300,10 @@ def test_object_put_invalid_status(mocker):
                  side_effect=to_dict_mock)
     client = OCIObjectStorageClient(FAKE_CONFIG, FAKE_SECTION)
     fake_data = utils.random_string()
-    with utils.temp_file() as temp_file:
-        with open(temp_file, 'w+') as writer:
-            writer.write(fake_data)
-        with pytest.raises(ObjectStorageException) as error:
-            client.object_put(FAKE_NAMESPACE, FAKE_BUCKET, 'some-object-name', temp_file)
-        assert str(error.value) == 'Error uploading object, Reponse code 400'
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir) as temp_file:
+            with open(temp_file, 'w+') as writer:
+                writer.write(fake_data)
+            with pytest.raises(ObjectStorageException) as error:
+                client.object_put(FAKE_NAMESPACE, FAKE_BUCKET, 'some-object-name', temp_file)
+            assert str(error.value) == 'Error uploading object, Reponse code 400'

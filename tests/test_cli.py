@@ -2,7 +2,8 @@ from copy import deepcopy
 
 import pytest
 
-from backup_tool.cli.client import DEFAULT_SETTINGS_FILE, parse_args
+from backup_tool.cli.client import DEFAULT_SETTINGS_FILE
+from backup_tool.cli.client import parse_args, load_settings
 from backup_tool.exception import CLIException
 
 def test_parse_args_exceptions():

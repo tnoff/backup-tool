@@ -261,15 +261,11 @@ def generate_args(command_line_args):
     '''
     cli_args = parse_args(command_line_args)
     args = load_settings(cli_args.pop('settings_file', None))
-
-    args_to_pop = []
+    override_args = {}
     for k, v in cli_args.items():
-        if v is None:
-            args_to_pop.append(k)
-    for k in args_to_pop:
-        cli_args.pop(k)
-    args.update(cli_args)
-
+        if v is not None:
+            override_args[k] = v
+    args.update(override_args)
     return args
 
 def main():
