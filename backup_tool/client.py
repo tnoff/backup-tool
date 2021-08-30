@@ -63,7 +63,8 @@ class BackupClient():
 
         self.oci_namespace = oci_namespace
         self.oci_bucket = oci_bucket
-        self.os_client = OCIObjectStorageClient(oci_config_file, oci_config_section, logger=self.logger)
+        if self.oci_namespace and self.oci_bucket:
+            self.os_client = OCIObjectStorageClient(oci_config_file, oci_config_section, logger=self.logger)
 
     def _generate_uuid(self):
         '''

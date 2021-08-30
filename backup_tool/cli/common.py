@@ -20,6 +20,6 @@ class CommonArgparse(ArgumentParser):
             options = result.group(1)
             OPTIONS_REGEX = "'([a-zA-Z0-9]+)'"
             options_list = sorted(re.findall(OPTIONS_REGEX, options))
-            sorted_output = ", ".join("'%s'" % opt for opt in options_list)
+            sorted_output = ", ".join("'%s'" % opt for opt in options_list) #pylint: disable=consider-using-f-string
             message = message.replace(options, sorted_output)
         raise CLIException(message)

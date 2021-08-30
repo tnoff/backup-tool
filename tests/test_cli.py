@@ -1,9 +1,13 @@
 from copy import deepcopy
+from tempfile import TemporaryDirectory
 
+from mock import patch, call
 import pytest
 
+from backup_tool import utils
+from backup_tool.cli.client import ClientCLI
 from backup_tool.cli.client import DEFAULT_SETTINGS_FILE
-from backup_tool.cli.client import parse_args, load_settings
+from backup_tool.cli.client import parse_args, load_settings, generate_args
 from backup_tool.exception import CLIException
 
 def test_parse_args_exceptions():
@@ -250,3 +254,61 @@ def test_directory():
     assert args.pop('command') == 'backup'
     assert args.pop('dir_path') == 'test-dir'
     assert args.pop('cache_file') == 'cachey'
+
+def test_load_settings():
+    result = load_settings(None)
+    assert result == {}
+
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir) as settings_file:
+            settings_file.write_text(' ')
+            result = load_settings(str(settings_file))
+        assert result == {} 
+
+        with utils.temp_file(tmp_dir) as settings_file:
+            settings_file.write_text('[general]\nlogging_file = foo.log\ndatabase_file = db.sql')
+            result = load_settings(str(settings_file))
+        assert result['logging_file'] == 'foo.log'
+        assert result['database_file'] == 'db.sql'
+
+        with utils.temp_file(tmp_dir) as settings_file:
+            settings_file.write_text('[general]\ncrypto_key_file = /home/foo/key\nrelative_path = /home/foo')
+            result = load_settings(str(settings_file))
+        assert result['crypto_key_file'] == '/home/foo/key'
+        assert result['relative_path'] == '/home/foo'
+
+        with utils.temp_file(tmp_dir) as settings_file:
+            settings_file.write_text('[oci]\nconfig_file = /home/oci/config\nconfig_section = DEFAULT')
+            result = load_settings(str(settings_file))
+        assert result['oci_config_file'] == '/home/oci/config'
+        assert result['oci_config_section'] == 'DEFAULT'
+
+        with utils.temp_file(tmp_dir) as settings_file:
+            settings_file.write_text('[oci]\nnamespace = foo\nbucket = bar')
+            result = load_settings(str(settings_file))
+        assert result['oci_namespace'] == 'foo'
+        assert result['oci_bucket'] == 'bar'
+
+def test_generate_args():
+    result = generate_args(['file', 'list'])
+    assert result['module'] == 'file'
+    assert result['command'] == 'list'
+
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir) as settings_file:
+            settings_file.write_text('[general]\nlogging_file = foo.log')
+            result = generate_args(['-s', str(settings_file), 'file', 'list'])
+            assert result['logging_file'] == 'foo.log'
+        with utils.temp_file(tmp_dir) as settings_file:
+            settings_file.write_text('[general]\nlogging_file = foo.log')
+            result = generate_args(['-s', str(settings_file), '-l', 'bar.log', 'file', 'list'])
+            assert result['logging_file'] == 'bar.log'
+
+@patch('builtins.print')
+def test_cli_client(mocker):
+    x = ClientCLI(**{
+        'module': 'file',
+        'command': 'list',
+    })
+    x.run_command()
+    assert mocker.mock_calls == [call('[]')]

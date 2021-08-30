@@ -21,23 +21,25 @@ class ClientCLI():
         '''
         Backup Client
         '''
-        crypto_key = None
-        key_file_path = Path(kwargs.pop('crypto_key_file', ''))
-        if key_file_path.exists():
-            crypto_key = key_file_path.read_text().strip()
+        crypto_key = kwargs.pop('crypto_key_file', None)
+        if crypto_key:
+            key_file_path = Path(crypto_key)
+            if key_file_path.exists():
+                crypto_key = key_file_path.read_text().strip() #pylint:disable=unspecified-encoding
 
         self.temporary_directory = TemporaryDirectory() #pylint:disable=consider-using-with
 
         client_kwargs = {
             'database_file': kwargs.pop('database_file', None),
             'crypto_key': crypto_key,
+            'work_directory': kwargs.pop('work_directory', self.temporary_directory.name),
+            'logging_file': kwargs.pop('logging_file', None),
+            'relative_path': kwargs.pop('relative_path', None),
+
             'oci_config_file': kwargs.pop('oci_config_file', None),
             'oci_config_section': kwargs.pop('oci_config_section', None),
             'oci_namespace': kwargs.pop('oci_namespace', None),
             'oci_bucket': kwargs.pop('oci_bucket', None),
-            'work_directory': kwargs.pop('work_directory', self.temporary_directory.name),
-            'logging_file': kwargs.pop('logging_file', None),
-            'relative_path': kwargs.pop('relative_path', None),
         }
 
         self.client = BackupClient(**client_kwargs)
@@ -239,18 +241,19 @@ def load_settings(settings_file):
         'logging_file' : ['general', 'logging_file'],
         'crypto_key_file' : ['general', 'crypto_key_file'],
         'relative_path' : ['general', 'relative_path'],
-        'oci_namespace' : ['object_storage', 'namespace'],
-        'oci_bucket' : ['object_storage', 'bucket_name'],
+
+        'oci_namespace' : ['oci', 'namespace'],
+        'oci_bucket' : ['oci', 'bucket'],
         'oci_config_file' : ['oci', 'config_file'],
-        'oci_config_section' : ['oci', 'config_stage'],
+        'oci_config_section' : ['oci', 'config_section'],
     }
     return_data = {}
     for key_name, args in mapping.items():
         try:
             value = parser.get(*args)
+            return_data[key_name] = value
         except (NoSectionError, NoOptionError):
-            value = None
-        return_data[key_name] = value
+            pass
     return return_data
 
 def generate_args(command_line_args):
