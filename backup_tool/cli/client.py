@@ -1,3 +1,4 @@
+import asyncio
 from configparser import NoSectionError, NoOptionError, SafeConfigParser
 import json
 import os
@@ -66,19 +67,50 @@ class ClientCLI():
                 child.unlink()
         temp_dir_path.rmdir()
 
-    def run_command(self):
+    async def run_command(self):
         '''
         Run command given in kwargs
         '''
         try:
             command = getattr(self, self.command_str)
+            value = await command(**self.additional_kwargs)
         except AttributeError:
             command = getattr(self.client, self.command_str)
-        value = command(**self.additional_kwargs)
+            value = command(**self.additional_kwargs)
         if value is not None:
             print(json.dumps(value, indent=4))
 
-    def directory_backup(self, dir_path, overwrite=False,
+    async def __produce_backup_files(self, queue, directory_path, skip_files):
+        self.client.logger.info(f'Generating file list from directory "{str(directory_path)}"')
+        for file_name in directory_path.glob('**/*'):
+            # Skip if matches any continue
+            skip = False
+            for skip_check in skip_files:
+                if re.match(skip_check, str(file_name)):
+                    self.client.logger.warning(f'Ignoring file "{str(file_name)}" since matches skip check "{skip_check}"')
+                    skip = True
+                    break
+            if skip:
+                continue
+            if str(file_name) in self.cache_json['backup']['processed']:
+                self.client.logger.warning(f'Ignoring file "{str(file_name)}" as it is in cache')
+                continue
+            if file_name.is_dir():
+                continue
+            self.client.logger.debug(f'Adding file to backup queue "{str(file_name)}"')
+            await queue.put(file_name)
+
+    async def __consoume_backup_files(self, queue, overwrite, check_uploaded_md5, thread_count):
+        self.client.logger.debug(f'Starting consumer thread {thread_count}')
+        while True:
+            file_name = await queue.get()
+            self.client.logger.debug(f'Consumer thread {thread_count}, backing up file {file_name}')
+            self.client.file_backup(str(file_name), overwrite=overwrite, check_uploaded_md5=check_uploaded_md5)
+            self.cache_json['backup']['processed'].append(str(file_name))
+            queue.task_done()
+            await asyncio.sleep(1)
+
+    async def directory_backup(self, dir_path, overwrite=False,
                         check_uploaded_md5=False, skip_files=None,
                         cache_file=None):
         '''
@@ -106,30 +138,15 @@ class ClientCLI():
         elif isinstance(skip_files, str):
             skip_files = [skip_files]
 
-        file_list = []
-
-        self.client.logger.info(f'Generating file list from directory "{str(directory_path)}"')
-        for file_name in directory_path.glob('**/*'):
-            # Skip if matches any continue
-            skip = False
-            for skip_check in skip_files:
-                if re.match(skip_check, str(file_name)):
-                    self.client.logger.warning(f'Ignoring file "{str(file_name)}" since matches skip check "{skip_check}"')
-                    skip = True
-                    break
-            if skip:
-                continue
-            if str(file_name) in self.cache_json['backup']['processed']:
-                self.client.logger.warning(f'Ignoring file "{str(file_name)}" as it is in cache')
-                continue
-            if file_name.is_dir():
-                continue
-            self.client.logger.debug(f'Adding file to backup queue "{str(file_name)}"')
-            file_list.append(file_name)
-
-        for file_name in file_list:
-            self.client.file_backup(str(file_name), overwrite=overwrite, check_uploaded_md5=check_uploaded_md5)
-            self.cache_json['backup']['processed'].append(str(file_name))
+        queue = asyncio.Queue()
+        self.client.logger.debug('Starting backup file consumer queues')
+        consumers = [asyncio.create_task(self.__consoume_backup_files(queue, overwrite, check_uploaded_md5, count)) for count in range(3)]
+        self.client.logger.debug('Starting backup file producer queues')
+        producers = [asyncio.create_task(self.__produce_backup_files(queue, directory_path, skip_files)) for _ in range(1)]
+        self.client.logger.debug('Waiting for producer threads to complete')
+        await asyncio.wait(producers)
+        self.client.logger.debug('Waiting for consumer threads to complete')
+        await asyncio.wait(consumers)
 
 def parse_args(args): #pylint:disable=too-many-locals,too-many-statements
     '''
@@ -271,13 +288,16 @@ def generate_args(command_line_args):
     args.update(override_args)
     return args
 
-def main():
+async def main_runner():
     '''
     Main Runner
     '''
     try:
         args = generate_args(sys.argv[1:])
         with ClientCLI(**args) as client_cli:
-            client_cli.run_command()
+            await client_cli.run_command()
     except CLIException as error:
         print(str(error))
+
+def main():
+    asyncio.run(main_runner())
