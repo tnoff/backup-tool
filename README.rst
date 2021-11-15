@@ -16,11 +16,7 @@ The tool can also restore these files from OCI Object storage, by first download
 Encryption Method
 -----------------
 
-The tool uses a very basic AES encryption method that uses a single password (crypto key) to encrypt and decrypt files.
-
-The tool will read a file in 16-byte intervals, and encrypt this into a 24-byte hash using the password specified.
-
-If the last interval read from a file is not exactly 16-bytes, an "offset" of 0's will be added to the end of the interval before encryption. This offset is returned by the encryption method, and saved in the database for decryption. Decrypting a file will require specifying the offset for the file.
+The tool uses AES encryption in CBC mode. Files are encrypted using a random salt value and a passphrase supplied to the client.
 
 --------
 MD5 sums
@@ -104,7 +100,7 @@ Get compartment OCID and create bucket
 Crypto Key
 ==========
 
-To encrypt and decrypt file, you'll need a crypto key. The crypto key can be any valid string including letters, numbers, and special characters. The length of the crypto key must be a multiple of 16.
+To encrypt and decrypt file, you'll need a crypto key. The crypto key can be any valid string including letters, numbers, and special characters. The length of the crypto key must be either 16, 24 or 32 bytes long.
 
 .. code-block:: none
 
@@ -160,6 +156,17 @@ For example, if a relative path `/home/user` is used, and a file `/home/user/foo
 
 Then, when the file is restored, the path will joined with the relative path, to make `/home/user/foo/bar` again.
 
+
+-------
+Caching
+-------
+
+When using the cli, supply a "work directory" and the client will track:
+- files already encrypted
+- files encrypted and uploaded
+
+It will also track uploads that can be resumed.
+
 ----------------------
 Object Storage Options
 ----------------------
@@ -180,13 +187,13 @@ To backup an entire directory:
 
 .. code-block:: none
 
-    backup-tool directory backup path/to/dir [--overwrite]
+    backup-tool directory backup --dir-paths path/to/dir [--overwrite]
 
 To backup a directory, while skipping files:
 
 .. code-block:: none
 
-    backup-tool directory backup path/to/dir --skip-files "*.txt" [--overwrite]
+    backup-tool directory backup --dir-paths path/to/dir --skip-files "*.txt" [--overwrite]
 
 To list local files:
 

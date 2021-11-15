@@ -40,33 +40,7 @@ def test_object_list(mocker):
             backup_list = client.backup_list()
             assert len(backup_list) == 1
             # Files should have diff md5s
-            assert file_list[0]['local_md5_checksum'] != backup_list[0]['uploaded_md5_checksum']
 
-def test_file_backup_same_md5s(mocker):
-    mocker.patch('backup_tool.client.OCIObjectStorageClient',
-                 return_value=MockOSClient)
-    with TemporaryDirectory() as tmp_dir:
-        with utils.temp_file(tmp_dir, suffix='.sql') as temp_db:
-            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
-            randomish_string = utils.random_string()
-            # Write same file and upload twice
-            with utils.temp_file(tmp_dir) as temp_file1:
-                with open(temp_file1, 'w') as writer:
-                    writer.write(randomish_string)
-                client.file_backup(temp_file1)
-
-                with utils.temp_file(tmp_dir) as temp_file2:
-                    with open(temp_file2, 'w') as writer:
-                        writer.write(randomish_string)
-                    client.file_backup(temp_file2)
-
-            # Should be one backup file with one local file
-            file_list = client.file_list()
-            assert len(file_list) == 2
-            assert file_list[0]['local_md5_checksum'] == file_list[1]['local_md5_checksum']
-
-            backup_list = client.backup_list()
-            assert len(backup_list) == 1
 
 def test_file_backup_overwrite(mocker):
     mocker.patch('backup_tool.client.OCIObjectStorageClient',
@@ -140,11 +114,7 @@ def test_file_encrypt(mocker):
                                         FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
 
                     result = client.file_encrypt(temp_file_input, temp_file_output)
-                    assert result['offset'] == 0
-
-                    with open(temp_file_output, 'r') as reader:
-                        read_data = reader.read()
-                    assert read_data == 'dXzNDNxckOrb7uz2ON0AAA=='
+                    assert result['original_md5'] == 'q+rAfTwowb755zAALHU+1A=='
 
 def test_file_decrypt(mocker):
     mocker.patch('backup_tool.client.OCIObjectStorageClient',
@@ -154,10 +124,11 @@ def test_file_decrypt(mocker):
             client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
             with utils.temp_file(tmp_dir) as temp_file_input:
                 # Write some dummy data to file
-                with open(temp_file_input, 'w') as writer:
-                    writer.write('dXzNDNxckOrb7uz2ON0AAA==')
+                with open(temp_file_input, 'wb') as writer:
+                    writer.write(b'\x10\x00\x00\x00\x00\x00\x00\x00\x0f\xc7\x9a\x8f\x0b\x89\xaf\xc9~\xbc\x1b)\xe7\xaa,R\x05H\xa5\x9f\x89\x00\xd3\xeb\x8ee\xec\xc64\xbd\x1b(')
                 with utils.temp_file(tmp_dir) as temp_file_output:
-                    client.file_decrypt(temp_file_input, temp_file_output, 0)
+                    result = client.file_decrypt(temp_file_input, temp_file_output)
+                    print(result)
 
                     with open(temp_file_output, 'r') as reader:
                         read_data = reader.read()
@@ -211,37 +182,3 @@ def test_backup_cleanup(mocker):
             # Make sure backup list is empty
             backup_list = client.backup_list()
             assert len(backup_list) == 0
-
-def test_file_duplicates(mocker):
-    mocker.patch('backup_tool.client.OCIObjectStorageClient',
-                 return_value=MockOSClient)
-    with TemporaryDirectory() as tmp_dir:
-        with utils.temp_file(tmp_dir, suffix='.sql') as temp_db:
-            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
-            # First upload temp file
-            with utils.temp_file(tmp_dir) as temp_file:
-                with open(temp_file, 'w') as writer:
-                    writer.write('abc')
-                client.file_backup(temp_file)
-
-            # Upload temp file of same data
-            with utils.temp_file(tmp_dir) as temp_file:
-                with open(temp_file, 'w') as writer:
-                    writer.write('abc')
-                client.file_backup(temp_file)
-
-
-            # Make sure there are two files, but one backup
-            file_list = client.file_list()
-            assert len(file_list) == 2
-
-            backup_list = client.backup_list()
-            assert len(backup_list) == 1
-
-            # Now test duplicates
-            duplicates = client.file_duplicates()
-            # Make sure there is one key with a list of 2 items
-            keys = list(duplicates.keys())
-            assert len(keys) == 1
-
-            assert len(duplicates[keys[0]]) == 2

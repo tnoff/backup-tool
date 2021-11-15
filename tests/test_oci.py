@@ -18,6 +18,19 @@ FAKE_BUCKET = 'dragons'
 def to_dict_mock(object_data):
     return vars(object_data)
 
+def list_all_mock(client, *args, **kwargs):
+    return client(*args, **kwargs)
+
+class MockResponse():
+    def __init__(self, status, data):
+        self.status = status
+        self.data = data
+
+class MockListData():
+    def __init__(self, objects):
+        self.objects = objects
+
+
 class MockObject():
     def __init__(self, name, size, md5):
         self.name = name
@@ -25,85 +38,54 @@ class MockObject():
         self.md5 = md5
         self.timeCreated = "2019-07-21T23:22:54.663000+00:00"
 
-class MockResponse():
-    def __init__(self, status, data):
-        self.status = status
+class MockMultiUploadList():
+    def __init__(self, data):
+        self.current = -1
         self.data = data
 
-class MockList():
-    def __init__(self, objects):
-        self.objects = objects
-        self.next_start_with = None
+    def __iter__(self):
+        return self
+    
+    def __next__(self):
+        self.current += 1
+        if self.current >= len(self.data):
+            raise StopIteration
+        return self.data[self.current]
+
+class MockMultipartUpload():
+    def __init__(self, object_name, upload_id):
+        self.object = object_name
+        self.upload_id = upload_id
+
 
 #
 # Object List Tests
 #
 
+
 def test_object_list(mocker):
-    '''
-    Test basic object list
-    '''
+    # Test basic object list
     fake_name = utils.random_string()
     class MockOCI():
         def __init__(self, *args, **kwargs):
             pass
 
         def list_objects(self, *args, **kwargs):
-            return MockResponse(200, MockList([MockObject(fake_name, 123, '0123456')]))
+            return MockResponse(200, MockListData([MockObject(fake_name, 123, '0123456')]))
+
     mocker.patch('backup_tool.oci_client.from_file',
                  return_value='')
     mocker.patch('backup_tool.oci_client.ObjectStorageClient',
                  return_value=MockOCI)
+    mocker.patch('backup_tool.oci_client.list_call_get_all_results',
+                 side_effect=list_all_mock)
     mocker.patch('backup_tool.oci_client.to_dict',
                  side_effect=to_dict_mock)
     client = OCIObjectStorageClient(FAKE_CONFIG, FAKE_SECTION)
     # Make sure to pass page limit of 1
-    objects = client.object_list(FAKE_NAMESPACE, FAKE_BUCKET, page_limit=1)
+    objects = client.object_list(FAKE_NAMESPACE, FAKE_BUCKET)
     assert len(objects) == 1
     assert objects[0]['name'] == fake_name
-
-def test_object_list_invalid_status(mocker):
-    '''
-    Test object list with non-200 status code fails
-    '''
-    fake_name = utils.random_string()
-    class MockOCI():
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def list_objects(self, *args, **kwargs):
-            return MockResponse(400, '')
-    mocker.patch('backup_tool.oci_client.from_file',
-                 return_value='')
-    mocker.patch('backup_tool.oci_client.ObjectStorageClient',
-                 return_value=MockOCI)
-    mocker.patch('backup_tool.oci_client.to_dict',
-                 side_effect=to_dict_mock)
-    client = OCIObjectStorageClient(FAKE_CONFIG, FAKE_SECTION)
-    with pytest.raises(ObjectStorageException) as error:
-        client.object_list(FAKE_NAMESPACE, FAKE_BUCKET, page_limit=1)
-    assert str(error.value) == 'Error list objects, Reponse code 400'
-
-def test_object_list_raise_exception(mocker):
-    '''
-    Test object list with non-200 status code fails
-    '''
-    fake_name = utils.random_string()
-    class MockOCI():
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def list_objects(self, *args, **kwargs):
-            raise ServiceError(500, 500, {}, f'Unable to retrieve list due to white walkers')
-    mocker.patch('backup_tool.oci_client.from_file',
-                 return_value='')
-    mocker.patch('backup_tool.oci_client.ObjectStorageClient',
-                 return_value=MockOCI)
-    mocker.patch('backup_tool.oci_client.to_dict',
-                 side_effect=to_dict_mock)
-    client = OCIObjectStorageClient(FAKE_CONFIG, FAKE_SECTION)
-    with pytest.raises(ObjectStorageException) as error:
-        client.object_list(FAKE_NAMESPACE, FAKE_BUCKET, page_limit=1)
 
 
 #
@@ -260,6 +242,7 @@ def test_object_put(mocker):
     class MockOCI():
         def __init__(self, *args, **kwargs):
             pass
+
     class MockUploadManager():
         def __init__(self, *args, **kwargs):
             pass
@@ -280,6 +263,43 @@ def test_object_put(mocker):
             with open(temp_file, 'w+') as writer:
                 writer.write(fake_data)
                 client.object_put(FAKE_NAMESPACE, FAKE_BUCKET, 'some-object-name', temp_file)
+
+def test_object_put_resume(mocker):
+    class MockOCI():
+        def __init__(self, *args, **kwargs):
+            pass
+        
+        def list_multipart_uploads(self, *args, **kwargs):
+            return MockResponse(200, MockMultiUploadList([MockMultipartUpload('some-object-name', '1234')]))
+
+
+    class MockUploadManager():
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def upload_file(self, *args, **kwargs):
+            return MockResponse(200, None)
+
+        def resume_upload_file(self, *args, **kwargs):
+            return MockResponse(200, None)
+
+    mocker.patch('backup_tool.oci_client.from_file',
+                 return_value='')
+    mocker.patch('backup_tool.oci_client.ObjectStorageClient',
+                 return_value=MockOCI)
+    mocker.patch('backup_tool.oci_client.UploadManager',
+                 return_value=MockUploadManager)
+    mocker.patch('backup_tool.oci_client.list_call_get_all_results',
+                 side_effect=list_all_mock)
+    mocker.patch('backup_tool.oci_client.to_dict',
+                 side_effect=to_dict_mock)
+    client = OCIObjectStorageClient(FAKE_CONFIG, FAKE_SECTION)
+    fake_data = utils.random_string()
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir) as temp_file:
+            with open(temp_file, 'w+') as writer:
+                writer.write(fake_data)
+                client.object_put(FAKE_NAMESPACE, FAKE_BUCKET, 'some-object-name', temp_file, resume_upload=True)
 
 def test_object_put_invalid_status(mocker):
     class MockOCI():

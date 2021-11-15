@@ -7,6 +7,7 @@ from oci.object_storage import ObjectStorageClient, UploadManager
 from oci.util import to_dict
 
 from oci.object_storage.models import RestoreObjectsDetails
+from oci.pagination import list_call_get_all_results
 
 from backup_tool.exception import ObjectStorageException
 from backup_tool.utils import setup_logger
@@ -31,37 +32,21 @@ class OCIObjectStorageClient():
         else:
             self.logger = logger
 
-    def object_list(self, namespace_name, bucket_name, page_limit=1024):
+    def object_list(self, namespace_name, bucket_name):
         '''
         Return list of object storage objects
 
         namespace_name  :   Object Storage Namespace
         bucket_name     :   Bucket Name
-        page_limit      :   Page Limit for Object Storage Calls
         '''
-        all_objects = []
-        next_page = None
-        fields = "name,md5,size,timeCreated"
         self.logger.info("Retrieving object list from namespace %s and bucket %s",
                          namespace_name, bucket_name)
-        while True:
-            try:
-                response = self.object_storage_client.list_objects(namespace_name,
-                                                                   bucket_name,
-                                                                   start=next_page,
-                                                                   limit=page_limit,
-                                                                   fields=fields)
-            except ServiceError as error:
-                raise ObjectStorageException from error
-            if response.status != 200:
-                raise ObjectStorageException(f'Error list objects, Reponse code {response.status}')
-            all_objects += [to_dict(obj) for obj in response.data.objects]
-            next_page = response.data.next_start_with
-            self.logger.debug(f'Retrieved list of up to {page_limit} objects, next page {next_page}')
-            if next_page is None:
-                return all_objects
+        all_objects_response = list_call_get_all_results(self.object_storage_client.list_objects,
+                                                         namespace_name, bucket_name, fields='name,md5,size,timeCreated')
+        return [to_dict(obj) for obj in all_objects_response.data.objects]
 
-    def object_put(self, namespace_name, bucket_name, object_name, file_name, md5_sum=None):
+
+    def object_put(self, namespace_name, bucket_name, object_name, file_name, md5_sum=None, resume_upload=False):
         '''
         Upload object to object storage
 
@@ -73,7 +58,20 @@ class OCIObjectStorageClient():
         '''
         self.logger.info(f'Starting upload of file "{file_name}" to namespace "{namespace_name}" '
                          f'bucket "{bucket_name}" and object name "{object_name}"')
-        response = self.upload_manager.upload_file(namespace_name, bucket_name, object_name, file_name, content_md5=md5_sum)
+        upload_resumed = False
+        if resume_upload:
+            self.logger.debug(f'Checking if object name "{object_name}" is in list of pending uploads')
+            multipart_uploads = list_call_get_all_results(self.object_storage_client.list_multipart_uploads,
+                                                          namespace_name, bucket_name)
+            for multipart_upload in multipart_uploads.data:
+                # Assume namespace and bucket are the same
+                if multipart_upload.object == object_name:
+                    self.logger.debug(f'Resuming file upload {multipart_upload.upload_id} for object "{object_name}"')
+                    response = self.upload_manager.resume_upload_file(namespace_name, bucket_name, object_name, file_name, multipart_upload.upload_id)
+                    upload_resumed = True
+                    break
+        if not upload_resumed:
+            response = self.upload_manager.upload_file(namespace_name, bucket_name, object_name, file_name, content_md5=md5_sum)
         if response.status != 200:
             raise ObjectStorageException(f'Error uploading object, Reponse code {str(response.status)}')
         self.logger.info(f'File "{file_name}" uploaded to object storage with object name "{object_name}"')

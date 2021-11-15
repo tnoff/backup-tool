@@ -1,95 +1,86 @@
-import base64
 import codecs
 import hashlib
+import os
+import struct
 
 from Crypto.Cipher import AES
 
-# https://stackoverflow.com/questions/519633/lazy-method-for-reading-big-file-in-python
-def read_in_chunks(file_name, chunk_size=16):
+# https://eli.thegreenplace.net/2010/06/25/aes-encryption-of-files-in-python-with-pycrypto
+def encrypt_file(input_file, output_file, passphrase, chunksize=64*1024): #pylint:disable=too-many-locals
     '''
-    Iterate over file in chunks
+    Encrypts a file using AES (CBC mode) with the given key.
 
-    file_name   :   Name of file to read
-    chunk_size  :   Chunk size to return
+    input_file  :   Name of the input file
+    output_file :   Name of output file
+    passphrase  :   The encryption key - a string that must be either 16, 24 or 32 bytes long
+    chunksize   :   Sets the size of the chunk which the function uses to read and encrypt the file
     '''
-    while True:
-        data = file_name.read(chunk_size)
-        if not data:
-            break
-        yield data
+    iv = os.urandom(16)
+    encryptor = AES.new(passphrase, AES.MODE_CBC, iv)
+    filesize = os.path.getsize(input_file)
 
-def encrypt_file(input_file, output_file, passphrase):
-    '''
-    Encrypt file with a password
-
-    Note that this is a very simple encryption method
-
-    Reads file in 16 bit chunks, if the last chunk is not equal to 16, it will add "offset" of empty bits and encrypt.
-    This is then returned so that decryption knows to ignore these ending bits
-
-    input_file  :   File to encrypt
-    output_file :   Output encrypted file
-    passphrase  :   Encryption passphrase
-    '''
-    cipher = AES.new(passphrase, AES.MODE_ECB)
-    offset = 0
     original_hash_value = hashlib.md5()
     encrypted_hash_value = hashlib.md5()
-    with open(output_file, 'wb') as writer:
-        with open(input_file, 'rb') as reader:
-            for chunk in read_in_chunks(reader):
+    with open(input_file, 'rb') as infile:
+        with open(output_file, 'wb') as outfile:
+            packed_qs = struct.pack('<Q', filesize)
+            outfile.write(packed_qs)
+            encrypted_hash_value.update(packed_qs)
+            outfile.write(iv)
+            encrypted_hash_value.update(iv)
+            while True:
+                chunk = infile.read(chunksize)
+                if len(chunk) == 0:
+                    break
+                # Make sure we calculate has before trailing 0s are added
                 original_hash_value.update(chunk)
-                if len(chunk) != 16:
-                    # Possible last chunk not 16 bits in length
-                    # When this happens, return offset that was added
-                    # to make it 16 bits long, so that we know
-                    # to remove it during decryption
-                    offset = 16 - len(chunk)
-                    chunk = chunk.ljust(16)
-                encoded_bit = cipher.encrypt(chunk)
-                encoded_chunk = base64.b64encode(encoded_bit)
-                encrypted_hash_value.update(encoded_chunk)
-                writer.write(encoded_chunk)
+                if len(chunk) % 16 != 0:
+                    chunk += (' ' * (16 - len(chunk) % 16)).encode('utf-8')
+
+                encrypted_chunk = encryptor.encrypt(chunk)
+                encrypted_hash_value.update(encrypted_chunk)
+                outfile.write(encrypted_chunk)
     original_md5_value = str(codecs.encode(original_hash_value.digest(), 'base64')).rstrip("\\n'")[2:]
     encrypted_md5_value = str(codecs.encode(encrypted_hash_value.digest(), 'base64')).rstrip("\\n'")[2:]
-    return offset, original_md5_value, encrypted_md5_value
+    return original_md5_value, encrypted_md5_value
 
-def decrypt_file(input_file, output_file, passphrase, offset):
+def decrypt_file(input_file, output_file, passphrase, chunksize=24*1024): #pylint:disable=too-many-locals
     '''
-    Decrypt file with password
+    Decrypts a file using AES (CBC mode) with the given key.
 
-    input_file  :   File to decrypt
-    output_file :   Output decrypted file
-    passphrase  :   Encryption passphrase
-    offset      :   Offset from original encryption
+    input_file  :   Name of the input file
+    output_file :   Name of output file
+    passphrase  :   The encryption key - a string that must be either 16, 24 or 32 bytes long
+    chunksize   :   Sets the size of the chunk which the function uses to read and decrypt the file
     '''
-    cipher = AES.new(passphrase, AES.MODE_ECB)
     original_hash_value = hashlib.md5()
     decrypted_hash_value = hashlib.md5()
-    with open(output_file, 'wb') as writer:
-        with open(input_file, 'rb') as reader:
+    with open(input_file, 'rb') as infile:
+        read_input = infile.read(struct.calcsize('Q'))
+        original_hash_value.update(read_input)
+        origsize = struct.unpack('<Q', read_input)[0]
 
-            decoded_chunk = None
-            decoded_bit = None
+        iv = infile.read(16)
+        original_hash_value.update(iv)
+
+        decryptor = AES.new(passphrase, AES.MODE_CBC, iv)
+        total_size = 0
+        with open(output_file, 'wb') as outfile:
             while True:
-                chunk = reader.read(24)
-                if not chunk:
+                chunk = infile.read(chunksize)
+                if len(chunk) == 0:
                     break
-                if decoded_chunk is not None:
-                    writer.write(decoded_chunk)
-                    decrypted_hash_value.update(decoded_chunk)
-
                 original_hash_value.update(chunk)
-                decoded_bit = base64.b64decode(chunk)
-                decoded_chunk = cipher.decrypt(decoded_bit)
-
-            # Assume this is final part
-            if offset:
-                decoded_chunk = decoded_chunk[:-offset]
-            if decoded_chunk != b'' and decoded_chunk is not None:
-                writer.write(decoded_chunk)
-                decrypted_hash_value.update(decoded_chunk)
-
+                decrypted_bit = decryptor.decrypt(chunk)
+                # Check if current chunk is last chunk
+                check_end = total_size + len(chunk) - origsize
+                if check_end:
+                    # Assume its last chunk
+                    decrypted_bit = decrypted_bit[0:(-1 * ((total_size + len(chunk)) - origsize))]
+                else:
+                    total_size += len(chunk)
+                outfile.write(decrypted_bit)
+                decrypted_hash_value.update(decrypted_bit)
     original_md5_value = str(codecs.encode(original_hash_value.digest(), 'base64')).rstrip("\\n'")[2:]
     decrypted_md5_value = str(codecs.encode(decrypted_hash_value.digest(), 'base64')).rstrip("\\n'")[2:]
     return original_md5_value, decrypted_md5_value

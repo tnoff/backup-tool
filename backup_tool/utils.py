@@ -47,14 +47,14 @@ def temp_file(directory, name=None, suffix='', delete=True):
         if delete and file_path and file_path.exists():
             file_path.unlink()
 
-def md5(input_file):
+def md5(input_file, chunksize=64*1024):
     '''
     Get md5 base64 hash of input file
     '''
     hash_value = hashlib.md5()
     with open(input_file, 'rb') as read:
         while True:
-            chunk = read.read(1024)
+            chunk = read.read(chunksize)
             if not chunk:
                 break
             try:

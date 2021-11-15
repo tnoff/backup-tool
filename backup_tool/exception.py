@@ -15,3 +15,9 @@ class CLIException(BackupToolException):
     Exception specific to cli actions
     '''
     pass
+
+class BackupToolClientException(BackupToolException):
+    '''
+    Generic exception for client
+    '''
+    pass

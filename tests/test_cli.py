@@ -101,7 +101,6 @@ def test_file():
     assert args.pop('command') == 'backup'
     assert args.pop('local_file') == 'test-file'
     assert args.pop('overwrite') == False
-    assert args.pop('check_uploaded_md5') == False
 
     args = parse_args(['file', 'backup', 'test-file', '-o'])
     assert args.pop('module') == 'file'
@@ -115,17 +114,15 @@ def test_file():
     assert args.pop('local_file') == 'test-file'
     assert args.pop('overwrite') == True
 
-    args = parse_args(['file', 'backup', 'test-file', '-m'])
+    args = parse_args(['file', 'backup', 'test-file'])
     assert args.pop('module') == 'file'
     assert args.pop('command') == 'backup'
     assert args.pop('local_file') == 'test-file'
-    assert args.pop('check_uploaded_md5') == True
 
-    args = parse_args(['file', 'backup', 'test-file', '--check-uploaded-md5'])
+    args = parse_args(['file', 'backup', 'test-file'])
     assert args.pop('module') == 'file'
     assert args.pop('command') == 'backup'
     assert args.pop('local_file') == 'test-file'
-    assert args.pop('check_uploaded_md5') == True
 
     with pytest.raises(CLIException) as error:
         parse_args(['file', 'restore', 'foo'])
@@ -198,61 +195,58 @@ def test_backup():
     assert args.pop('dry_run') == True
 
 def test_directory():
-    args = parse_args(['directory', 'backup', 'test-dir'])
+    args = parse_args(['directory', 'backup', '--dir-paths', 'test-dir'])
     assert args.pop('module') == 'directory'
     assert args.pop('command') == 'backup'
-    assert args.pop('dir_path') == 'test-dir'
+    assert args.pop('dir_paths') == ['test-dir']
     assert args.pop('overwrite') == False
-    assert args.pop('check_uploaded_md5') == False
     assert args.pop('skip_files') == None
     assert args.pop('cache_file') == None
 
-    args = parse_args(['directory', 'backup', 'test-dir', '-o'])
+    args = parse_args(['directory', 'backup', '-o', '--dir-paths', 'test-dir'])
     assert args.pop('module') == 'directory'
     assert args.pop('command') == 'backup'
-    assert args.pop('dir_path') == 'test-dir'
+    assert args.pop('dir_paths') == ['test-dir']
     assert args.pop('overwrite') == True
 
-    args = parse_args(['directory', 'backup', 'test-dir', '--overwrite'])
+    args = parse_args(['directory', 'backup', '--overwrite', '--dir-paths', 'test-dir',])
     assert args.pop('module') == 'directory'
     assert args.pop('command') == 'backup'
-    assert args.pop('dir_path') == 'test-dir'
+    assert args.pop('dir_paths') == ['test-dir']
     assert args.pop('overwrite') == True
 
-    args = parse_args(['directory', 'backup', 'test-dir', '-m'])
+    args = parse_args(['directory', 'backup', '--dir-paths', 'test-dir',])
     assert args.pop('module') == 'directory'
     assert args.pop('command') == 'backup'
-    assert args.pop('dir_path') == 'test-dir'
-    assert args.pop('check_uploaded_md5') == True
+    assert args.pop('dir_paths') == ['test-dir']
 
-    args = parse_args(['directory', 'backup', 'test-dir', '--check-uploaded-md5'])
+    args = parse_args(['directory', 'backup', '--dir-paths', 'test-dir'])
     assert args.pop('module') == 'directory'
     assert args.pop('command') == 'backup'
-    assert args.pop('dir_path') == 'test-dir'
-    assert args.pop('check_uploaded_md5') == True
+    assert args.pop('dir_paths') == ['test-dir']
 
-    args = parse_args(['directory', 'backup', 'test-dir', '-f', 'test-one', 'test-two'])
+    args = parse_args(['directory', 'backup', '-f', 'test-one', 'test-two', '--dir-paths', 'test-dir'])
     assert args.pop('module') == 'directory'
     assert args.pop('command') == 'backup'
-    assert args.pop('dir_path') == 'test-dir'
+    assert args.pop('dir_paths') == ['test-dir']
     assert args.pop('skip_files') == ['test-one', 'test-two']
 
-    args = parse_args(['directory', 'backup', 'test-dir', '--skip-files', 'test-one', 'test-two'])
+    args = parse_args(['directory', 'backup', '--skip-files', 'test-one', 'test-two', '--dir-paths', 'test-dir'])
     assert args.pop('module') == 'directory'
     assert args.pop('command') == 'backup'
-    assert args.pop('dir_path') == 'test-dir'
+    assert args.pop('dir_paths') == ['test-dir']
     assert args.pop('skip_files') == ['test-one', 'test-two']
 
-    args = parse_args(['directory', 'backup', 'test-dir', '-cf', 'cachey'])
+    args = parse_args(['directory', 'backup', '-cf', 'cachey', '--dir-paths', 'test-dir'])
     assert args.pop('module') == 'directory'
     assert args.pop('command') == 'backup'
-    assert args.pop('dir_path') == 'test-dir'
+    assert args.pop('dir_paths') == ['test-dir']
     assert args.pop('cache_file') == 'cachey'
 
-    args = parse_args(['directory', 'backup', 'test-dir', '--cache-file', 'cachey'])
+    args = parse_args(['directory', 'backup', '--cache-file', 'cachey', '--dir-paths', 'test-dir'])
     assert args.pop('module') == 'directory'
     assert args.pop('command') == 'backup'
-    assert args.pop('dir_path') == 'test-dir'
+    assert args.pop('dir_paths') == ['test-dir']
     assert args.pop('cache_file') == 'cachey'
 
 def test_load_settings():

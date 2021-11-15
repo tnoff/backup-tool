@@ -41,11 +41,11 @@ class BackupEntry(BASE):
     # File paths
     uploaded_file_path = Column(String(256), unique=True)
 
+    # Original md5 sum before encryption
+    original_md5_checksum = Column(String(32))
+
     # MD5 sums
     uploaded_md5_checksum = Column(String(32), unique=True)
-
-    # Encrypted file offset
-    uploaded_encryption_offset = Column(Integer)
 
 @inject_function(as_dict)
 class BackupEntryLocalFile(BASE):
@@ -62,6 +62,3 @@ class BackupEntryLocalFile(BASE):
 
     # Local Path
     local_file_path = Column(String(40960), unique=True)
-
-    # MD5 sums
-    local_md5_checksum = Column(String(32))
