@@ -138,11 +138,11 @@ class ClientCLI():
         elif isinstance(skip_files, str):
             skip_files = [skip_files]
 
-        queue = asyncio.Queue()
+        backup_queue = asyncio.Queue()
         self.client.logger.debug('Starting backup file consumer queues')
-        consumers = [asyncio.create_task(self.__consoume_backup_files(queue, overwrite, check_uploaded_md5, count)) for count in range(3)]
+        consumers = [asyncio.create_task(self.__consoume_backup_files(backup_queue, overwrite, check_uploaded_md5, count)) for count in range(3)]
         self.client.logger.debug('Starting backup file producer queues')
-        producers = [asyncio.create_task(self.__produce_backup_files(queue, directory_path, skip_files)) for _ in range(1)]
+        producers = [asyncio.create_task(self.__produce_backup_files(backup_queue, directory_path, skip_files)) for _ in range(1)]
         self.client.logger.debug('Waiting for producer threads to complete')
         await asyncio.wait(producers)
         self.client.logger.debug('Waiting for consumer threads to complete')
