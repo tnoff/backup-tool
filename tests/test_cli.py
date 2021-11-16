@@ -311,4 +311,4 @@ def test_cli_client(mocker):
         'command': 'list',
     })
     x.run_command()
-    assert mocker.mock_calls == [call('[]')]
+    assert mocker.mock_calls == []

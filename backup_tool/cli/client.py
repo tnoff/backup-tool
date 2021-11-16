@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 from backup_tool.exception import CLIException
 from backup_tool.client import BackupClient
 from backup_tool.cli.common import CommonArgparse
+from backup_tool.database import BackupEntryLocalFile
 
 HOME_PATH = Path(os.path.expanduser('~'))
 DEFAULT_SETTINGS_FILE = HOME_PATH/ '.backup-tool' / 'config'
@@ -50,7 +51,7 @@ class ClientCLI():
         self.cache_file = None
         self.cache_json = {
             'backup': {
-                'pending': [],
+                'pending_upload': [],
                 'processed': [],
             },
         }
@@ -80,7 +81,7 @@ class ClientCLI():
         if value is not None:
             print(json.dumps(value, indent=4))
 
-    async def __produce_backup_files(self, queue, directory_path, skip_files):
+    async def __produce_backup_files(self, backup_queue, directory_path, skip_files, file_names_pending_upload):
         self.client.logger.info(f'Generating file list from directory "{str(directory_path)}"')
         for file_name in directory_path.glob('**/*'):
             # Skip if matches any continue
@@ -92,22 +93,37 @@ class ClientCLI():
                     break
             if skip:
                 continue
-            if str(file_name) in self.cache_json['backup']['processed']:
-                self.client.logger.warning(f'Ignoring file "{str(file_name)}" as it is in cache')
+            if str(file_name) in self.cache_json['backup']['processed'] or str(file_name) in file_names_pending_upload:
+                self.client.logger.warning(f'Ignoring file "{str(file_name)}" as it is in cache or pending upload')
                 continue
             if file_name.is_dir():
                 continue
             self.client.logger.debug(f'Adding file to backup queue "{str(file_name)}"')
-            await queue.put(file_name)
+            await backup_queue.put(file_name)
 
-    async def __consoume_backup_files(self, queue, overwrite, check_uploaded_md5, thread_count):
-        self.client.logger.debug(f'Starting consumer thread {thread_count}')
+    async def __consume_backup_files(self, backup_queue, upload_queue, overwrite, check_uploaded_md5, thread_count):
+        self.client.logger.debug(f'Starting backup consumer thread {thread_count}')
         while True:
-            file_name = await queue.get()
+            file_name = await backup_queue.get()
             self.client.logger.debug(f'Consumer thread {thread_count}, backing up file {file_name}')
-            self.client.file_backup(str(file_name), overwrite=overwrite, check_uploaded_md5=check_uploaded_md5)
-            self.cache_json['backup']['processed'].append(str(file_name))
-            queue.task_done()
+            upload_data = self.client.file_backup(str(file_name), overwrite=overwrite, check_uploaded_md5=check_uploaded_md5, automatically_upload_files=False)
+            self.cache_json['backup']['pending_upload'].append(upload_data)
+            await upload_queue.put(upload_data)
+            backup_queue.task_done()
+            await asyncio.sleep(1)
+
+    async def __consume_upload_files(self, upload_queue, thread_count):
+        self.client.logger.debug(f'Starting upload consumer thread {thread_count}')
+        while True:
+            upload_data = await upload_queue.get()
+            local_backup_file = self.client.db_session.query(BackupEntryLocalFile).get(upload_data['local_backup_file_id'])
+            self.client._file_backup_upload(upload_data['crypto_file'], #pylint:disable=protected-access
+                                            upload_data['crypto_file_md5'],
+                                            upload_data['offset'],
+                                            local_backup_file)
+            self.cache_json['backup']['processed'].append(str(upload_data['local_file']))
+            self.cache_json['backup']['peding_upload'].remove(upload_data)
+            upload_queue.task_done()
             await asyncio.sleep(1)
 
     async def directory_backup(self, dir_path, overwrite=False,
@@ -139,14 +155,23 @@ class ClientCLI():
             skip_files = [skip_files]
 
         backup_queue = asyncio.Queue()
+        upload_queue = asyncio.Queue()
+        # Check files that need to be uploaded still
+        file_names_pending_upload = []
+        for upload_data in self.cache_json['backup']['pending_upload']:
+            await upload_queue.put(upload_data)
+            file_names_pending_upload.append(str(upload_data['local_file']))
+        self.client.logger.debug('Starting upload file consumer queues')
+        upload_consumers = [asyncio.create_task(self.__consume_upload_files(upload_queue,  count)) for count in range(1)]
         self.client.logger.debug('Starting backup file consumer queues')
-        consumers = [asyncio.create_task(self.__consoume_backup_files(backup_queue, overwrite, check_uploaded_md5, count)) for count in range(3)]
+        backup_consumers = [asyncio.create_task(self.__consume_backup_files(backup_queue, upload_queue, overwrite, check_uploaded_md5, count)) for count in range(3)]
         self.client.logger.debug('Starting backup file producer queues')
-        producers = [asyncio.create_task(self.__produce_backup_files(backup_queue, directory_path, skip_files)) for _ in range(1)]
+        producers = [asyncio.create_task(self.__produce_backup_files(backup_queue, directory_path, skip_files, file_names_pending_upload)) for _ in range(1)]
         self.client.logger.debug('Waiting for producer threads to complete')
         await asyncio.wait(producers)
         self.client.logger.debug('Waiting for consumer threads to complete')
-        await asyncio.wait(consumers)
+        await asyncio.wait(backup_consumers)
+        await asyncio.wait(upload_consumers)
 
 def parse_args(args): #pylint:disable=too-many-locals,too-many-statements
     '''
@@ -300,4 +325,7 @@ async def main_runner():
         print(str(error))
 
 def main():
+    '''
+    Actual main method
+    '''
     asyncio.run(main_runner())

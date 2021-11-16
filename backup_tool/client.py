@@ -281,17 +281,20 @@ class BackupClient():
             with utils.temp_file(self.work_directory, delete=automatically_upload_files) as crypto_file:
                 self.logger.debug(f'Creating encrypted file "{str(crypto_file)}" from file "{str(local_file)}"')
                 offset, check_local_file_md5, crypto_file_md5 = crypto.encrypt_file(str(local_file), str(crypto_file), self.crypto_key)
-                self.logger.debug(f'Created encrypted file "{str(crypto_file)}" with md5 "{local_crypto_file_md5}" '
+                if check_local_file_md5 != local_file_md5:
+                    self.logger.error(f'Unable to verify md5 during crypto phase for file {str(local_file)}')
+                    return {}
+                self.logger.debug(f'Created encrypted file "{str(crypto_file)}" with md5 "{crypto_file_md5}" '
                                 f' from original file "{str(local_file)}" with md5 "{local_file_md5}"')
 
                 if automatically_upload_files:
-                    self._file_backup_upload(crypto_file, local_crypto_file_md5, offset, local_backup_file)
+                    self._file_backup_upload(crypto_file, crypto_file_md5, offset, local_backup_file)
                     return {}
                 return {
                     'local_file': str(local_file),
                     'local_file_md5': local_file_md5,
-                    'local_backup_file': str(crypto_file),
-                    'local_backup_file_md5': local_crypto_file_md5,
+                    'crypto_file': str(crypto_file),
+                    'crypto_file_md5': crypto_file_md5,
                     'offset': offset,
                     'local_backup_file_id': local_backup_file.id,
                 }
