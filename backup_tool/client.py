@@ -243,13 +243,14 @@ class BackupClient():
         self.logger.info(f'Updated local backup {local_backup_file.id} to match backup entry {backup_entry.id}')
         return True
 
-    def file_backup(self, local_file, overwrite=False, check_uploaded_md5=False):
+    def file_backup(self, local_file, overwrite=False, check_uploaded_md5=False, automatically_upload_files=True):
         '''
         Backup file to object storage
 
-        local_file          :       Full path of local file
-        overwrite           :       Upload new file is md5 is changed
-        check_uploaded_md5  :       Ensure any existing backup file matches expected encryption
+        local_file                  :       Full path of local file
+        overwrite                   :       Upload new file is md5 is changed
+        check_uploaded_md5          :       Ensure any existing backup file matches expected encryption
+        automatically_upload_files  :       Upload new files automatically
         '''
         # Use local file as the full path of the file
         # Use local file path as relative path for the database
@@ -258,33 +259,43 @@ class BackupClient():
             local_file_path = local_file_path.relative_to(self.relative_path)
             self.logger.debug(f'Using relative path for database "{str(local_file_path)}"')
         self.logger.info(f'Backing up local file: "{str(local_file_path)}"')
-        with utils.temp_file(self.work_directory) as crypto_file:
-            self.logger.debug(f'Creating encrypted file "{str(crypto_file)}" from file "{str(local_file)}"')
-            offset, local_file_md5, local_crypto_file_md5 = crypto.encrypt_file(str(local_file), str(crypto_file), self.crypto_key)
-            self.logger.debug(f'Created encrypted file "{str(crypto_file)}" with md5 "{local_crypto_file_md5}" '
-                              f' from original file "{str(local_file)}" with md5 "{local_file_md5}"')
+        local_file_md5 = utils.md5(local_file_path)
+        local_backup_file = self.db_session.query(BackupEntryLocalFile).\
+            filter(BackupEntryLocalFile.local_file_path == str(local_file_path)).first()
+        if local_backup_file:
+            upload_file = self._file_backup_file_exists(local_backup_file, local_file_path,
+                                                        local_file_md5, overwrite, check_uploaded_md5)
+        else:
+            upload_file = True
+            self.logger.debug(f'No existing local file found for path: "{str(local_file_path)}"')
+            backup_file_args = {
+                'local_file_path': str(local_file_path),
+                'local_md5_checksum' : local_file_md5,
+            }
 
-            local_backup_file = self.db_session.query(BackupEntryLocalFile).\
-                    filter(BackupEntryLocalFile.local_file_path == str(local_file_path)).first()
-            if local_backup_file:
-                upload_file = self._file_backup_file_exists(local_backup_file, local_file_path,
-                                                            local_file_md5, overwrite, check_uploaded_md5)
-            else:
-                upload_file = True
-                self.logger.debug(f'No existing local file found for path: "{str(local_file_path)}"')
-                backup_file_args = {
-                    'local_file_path': str(local_file_path),
-                    'local_md5_checksum' : local_file_md5,
+            local_backup_file = BackupEntryLocalFile(**backup_file_args)
+            self.db_session.add(local_backup_file)
+            self.db_session.commit()
+            self.logger.info(f'Created database entry {local_backup_file.id} for local file "{str(local_file_path)}"')
+        if upload_file:
+            with utils.temp_file(self.work_directory, delete=automatically_upload_files) as crypto_file:
+                self.logger.debug(f'Creating encrypted file "{str(crypto_file)}" from file "{str(local_file)}"')
+                offset, check_local_file_md5, crypto_file_md5 = crypto.encrypt_file(str(local_file), str(crypto_file), self.crypto_key)
+                self.logger.debug(f'Created encrypted file "{str(crypto_file)}" with md5 "{local_crypto_file_md5}" '
+                                f' from original file "{str(local_file)}" with md5 "{local_file_md5}"')
+
+                if automatically_upload_files:
+                    self._file_backup_upload(crypto_file, local_crypto_file_md5, offset, local_backup_file)
+                    return {}
+                return {
+                    'local_file': str(local_file),
+                    'local_file_md5': local_file_md5,
+                    'local_backup_file': str(crypto_file),
+                    'local_backup_file_md5': local_crypto_file_md5,
+                    'offset': offset,
+                    'local_backup_file_id': local_backup_file.id,
                 }
-
-                local_backup_file = BackupEntryLocalFile(**backup_file_args)
-                self.db_session.add(local_backup_file)
-                self.db_session.commit()
-                self.logger.info(f'Created database entry {local_backup_file.id} for local file "{str(local_file_path)}"')
-
-            if upload_file:
-                return self._file_backup_upload(crypto_file, local_crypto_file_md5, offset, local_backup_file)
-            return True
+        return {}
 
     def file_duplicates(self):
         '''
