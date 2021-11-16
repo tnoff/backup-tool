@@ -81,34 +81,39 @@ class ClientCLI():
         if value is not None:
             print(json.dumps(value, indent=4))
 
-    async def __produce_backup_files(self, backup_queue, directory_path, skip_files, file_names_pending_upload):
-        self.client.logger.info(f'Generating file list from directory "{str(directory_path)}"')
-        for file_name in directory_path.glob('**/*'):
-            # Skip if matches any continue
-            skip = False
-            for skip_check in skip_files:
-                if re.match(skip_check, str(file_name)):
-                    self.client.logger.warning(f'Ignoring file "{str(file_name)}" since matches skip check "{skip_check}"')
-                    skip = True
-                    break
-            if skip:
-                continue
-            if str(file_name) in self.cache_json['backup']['processed'] or str(file_name) in file_names_pending_upload:
-                self.client.logger.warning(f'Ignoring file "{str(file_name)}" as it is in cache or pending upload')
-                continue
-            if file_name.is_dir():
-                continue
-            self.client.logger.debug(f'Adding file to backup queue "{str(file_name)}"')
-            await backup_queue.put(file_name)
+    async def __produce_backup_files(self, backup_queue, directory_paths, skip_files, file_names_pending_upload):
+        for directory_path in directory_paths:
+            self.client.logger.info(f'Generating file list from directory "{str(directory_path)}"')
+            for file_path in directory_path.glob('**/*'):
+                file_name = file_path.resolve()
+                # Skip if matches any continue
+                skip = False
+                for skip_check in skip_files:
+                    if re.match(skip_check, file_name):
+                        self.client.logger.warning(f'Ignoring file "{file_name}" since matches skip check "{skip_check}"')
+                        skip = True
+                        break
+                if skip:
+                    continue
+                if file_name in self.cache_json['backup']['processed'] or file_name in file_names_pending_upload:
+                    self.client.logger.debug(f'Ignoring file "{file_name}" as it is in cache or pending upload')
+                    continue
+                if file_name.is_dir():
+                    continue
+                self.client.logger.debug(f'Adding file to backup queue "{file_name}"')
+                await backup_queue.put(file_name)
 
     async def __consume_backup_files(self, backup_queue, upload_queue, overwrite, check_uploaded_md5, thread_count):
         self.client.logger.debug(f'Starting backup consumer thread {thread_count}')
         while True:
             file_name = await backup_queue.get()
-            self.client.logger.debug(f'Consumer thread {thread_count}, backing up file {file_name}')
-            upload_data = self.client.file_backup(str(file_name), overwrite=overwrite, check_uploaded_md5=check_uploaded_md5, automatically_upload_files=False)
-            self.cache_json['backup']['pending_upload'].append(upload_data)
-            await upload_queue.put(upload_data)
+            self.client.logger.debug(f'Backup consumer thread {thread_count}, backing up file {file_name}')
+            upload_data = self.client.file_backup(file_name, overwrite=overwrite, check_uploaded_md5=check_uploaded_md5, automatically_upload_files=False)
+            if upload_data == {}:
+                self.cache_json['backup']['processed'].append(file_name)
+            else:
+                self.cache_json['backup']['pending_upload'].append(upload_data)
+                await upload_queue.put(upload_data)
             backup_queue.task_done()
             await asyncio.sleep(1)
 
@@ -117,6 +122,7 @@ class ClientCLI():
         while True:
             upload_data = await upload_queue.get()
             local_backup_file = self.client.db_session.query(BackupEntryLocalFile).get(upload_data['local_backup_file_id'])
+            self.client.logger.debug(f'Upload consumer thread {thread_count}, uploading crypto of file {str(upload_data["local_file"])}')
             self.client._file_backup_upload(upload_data['crypto_file'], #pylint:disable=protected-access
                                             upload_data['crypto_file_md5'],
                                             upload_data['offset'],
@@ -126,13 +132,13 @@ class ClientCLI():
             upload_queue.task_done()
             await asyncio.sleep(1)
 
-    async def directory_backup(self, dir_path, overwrite=False,
+    async def directory_backup(self, dir_paths, overwrite=False,
                         check_uploaded_md5=False, skip_files=None,
                         cache_file=None):
         '''
         Backup all files in directory
 
-        local_file          :       Full path of local file
+        dir_paths           :       Directories to backup
         overwrite           :       Upload new file is md5 is changed
         check_uploaded_md5  :       Ensure any existing backup file matches expected encryption
         skip_files          :       List of regexes to ignore for backup
@@ -143,10 +149,13 @@ class ClientCLI():
         if self.cache_file.exists():
             self.cache_json = json.loads(self.cache_file.read_text())
 
-        directory_path = Path(dir_path).resolve()
-        if not directory_path.exists():
-            self.client.logger.error(f'Unable to find directory {str(directory_path)}')
-            return
+        directory_paths = []
+        for dir_path in dir_paths:
+            directory_path = Path(dir_path).resolve()
+            if not directory_path.exists():
+                self.client.logger.error(f'Unable to find directory {str(directory_path)}')
+                return
+            directory_paths.append(directory_path)
 
         # Make sure skip files is a string type
         if skip_files is None:
@@ -161,17 +170,14 @@ class ClientCLI():
         for upload_data in self.cache_json['backup']['pending_upload']:
             await upload_queue.put(upload_data)
             file_names_pending_upload.append(str(upload_data['local_file']))
-        self.client.logger.debug('Starting upload file consumer queues')
+        self.client.logger.debug('Generating upload file consumer queues')
         upload_consumers = [asyncio.create_task(self.__consume_upload_files(upload_queue,  count)) for count in range(1)]
-        self.client.logger.debug('Starting backup file consumer queues')
+        self.client.logger.debug('Generating backup file consumer queues')
         backup_consumers = [asyncio.create_task(self.__consume_backup_files(backup_queue, upload_queue, overwrite, check_uploaded_md5, count)) for count in range(3)]
-        self.client.logger.debug('Starting backup file producer queues')
-        producers = [asyncio.create_task(self.__produce_backup_files(backup_queue, directory_path, skip_files, file_names_pending_upload)) for _ in range(1)]
-        self.client.logger.debug('Waiting for producer threads to complete')
-        await asyncio.wait(producers)
-        self.client.logger.debug('Waiting for consumer threads to complete')
-        await asyncio.wait(backup_consumers)
-        await asyncio.wait(upload_consumers)
+        self.client.logger.debug('Generating backup file producer queues')
+        producers = [asyncio.create_task(self.__produce_backup_files(backup_queue, directory_paths, skip_files, file_names_pending_upload)) for _ in range(1)]
+        self.client.logger.debug('Waiting for all threads to complete')
+        await asyncio.wait(producers + backup_consumers + upload_consumers)
 
 def parse_args(args): #pylint:disable=too-many-locals,too-many-statements
     '''
@@ -253,7 +259,7 @@ def parse_args(args): #pylint:disable=too-many-locals,too-many-statements
 
     # Directory backup
     dir_backup = dir_sub_parser.add_parser('backup', help='Backup file')
-    dir_backup.add_argument('dir_path', help='Directory local path')
+    dir_backup.add_argument('dir_paths', nargs='+', help='Directory local path')
     dir_backup.add_argument('--overwrite', '-o', action='store_true', help='Overwrite copy in database')
     dir_backup.add_argument('--check-uploaded-md5', '-m', action='store_true', help='Check uploaded md5 matches expected')
     dir_backup.add_argument('--skip-files', '-f', nargs='+', help='Skip files matching regexes')
