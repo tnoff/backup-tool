@@ -51,7 +51,7 @@ class ClientCLI():
         self.cache_file = None
         self.cache_json = {
             'backup': {
-                'pending_upload': [],
+                'pending_upload': {},
                 'processed': [],
             },
         }
@@ -81,8 +81,10 @@ class ClientCLI():
         if value is not None:
             print(json.dumps(value, indent=4))
 
-    async def __produce_backup_files(self, backup_queue, directory_paths, skip_files, file_names_pending_upload):
-        for directory_path in directory_paths:
+    async def __produce_backup_files(self, directory_queue, backup_queue, skip_files, file_names_pending_upload, thread_count):
+        self.client.logger.debug(f'Starting backkup producer thread {thread_count}')
+        while True:
+            directory_path = await directory_queue.get()
             self.client.logger.info(f'Generating file list from directory "{str(directory_path)}"')
             for file_path in directory_path.glob('**/*'):
                 file_name = file_path.resolve()
@@ -102,6 +104,8 @@ class ClientCLI():
                     continue
                 self.client.logger.debug(f'Adding file to backup queue "{file_name}"')
                 await backup_queue.put(file_name)
+            directory_queue.task_done()
+            await asyncio.sleep(1)
 
     async def __consume_backup_files(self, backup_queue, upload_queue, overwrite, check_uploaded_md5, thread_count):
         self.client.logger.debug(f'Starting backup consumer thread {thread_count}')
@@ -112,7 +116,8 @@ class ClientCLI():
             if upload_data == {}:
                 self.cache_json['backup']['processed'].append(file_name)
             else:
-                self.cache_json['backup']['pending_upload'].append(upload_data)
+                upload_data_key = upload_data.pop('local_file')
+                self.cache_json['backup']['pending_upload'][upload_data_key] = upload_data
                 await upload_queue.put(upload_data)
             backup_queue.task_done()
             await asyncio.sleep(1)
@@ -123,16 +128,22 @@ class ClientCLI():
             upload_data = await upload_queue.get()
             local_backup_file = self.client.db_session.query(BackupEntryLocalFile).get(upload_data['local_backup_file_id'])
             self.client.logger.debug(f'Upload consumer thread {thread_count}, uploading crypto of file {str(upload_data["local_file"])}')
+            try:
+                object_path = self.cache_json['backup']['pending_upload'][upload_data['local_file']]['object_path']
+            except KeyError:
+                object_path = self.client._generate_uuid()
+                self.cache_json['backup']['pending_upload'][upload_data['local_file']]['object_path'] = object_path
             self.client._file_backup_upload(upload_data['crypto_file'], #pylint:disable=protected-access
                                             upload_data['crypto_file_md5'],
                                             upload_data['offset'],
-                                            local_backup_file)
+                                            local_backup_file,
+                                            object_path=object_path)
             self.cache_json['backup']['processed'].append(str(upload_data['local_file']))
-            self.cache_json['backup']['peding_upload'].remove(upload_data)
+            del self.cache_json['backup']['pending_upload'][upload_data['local_file']]
             upload_queue.task_done()
             await asyncio.sleep(1)
 
-    async def directory_backup(self, dir_paths, overwrite=False,
+    async def directory_backup(self, dir_paths, overwrite=False, #pylint:disable=too-many-locals
                         check_uploaded_md5=False, skip_files=None,
                         cache_file=None):
         '''
@@ -149,13 +160,13 @@ class ClientCLI():
         if self.cache_file.exists():
             self.cache_json = json.loads(self.cache_file.read_text())
 
-        directory_paths = []
+        directory_queue = asyncio.Queue()
         for dir_path in dir_paths:
             directory_path = Path(dir_path).resolve()
             if not directory_path.exists():
                 self.client.logger.error(f'Unable to find directory {str(directory_path)}')
                 return
-            directory_paths.append(directory_path)
+            await directory_queue.put(directory_path)
 
         # Make sure skip files is a string type
         if skip_files is None:
@@ -167,15 +178,17 @@ class ClientCLI():
         upload_queue = asyncio.Queue()
         # Check files that need to be uploaded still
         file_names_pending_upload = []
-        for upload_data in self.cache_json['backup']['pending_upload']:
+        for local_file, upload_data in self.cache_json['backup']['pending_upload'].items():
+            upload_data['local_file'] = local_file
             await upload_queue.put(upload_data)
-            file_names_pending_upload.append(str(upload_data['local_file']))
+            file_names_pending_upload.append(local_file)
+
         self.client.logger.debug('Generating upload file consumer queues')
         upload_consumers = [asyncio.create_task(self.__consume_upload_files(upload_queue,  count)) for count in range(1)]
         self.client.logger.debug('Generating backup file consumer queues')
         backup_consumers = [asyncio.create_task(self.__consume_backup_files(backup_queue, upload_queue, overwrite, check_uploaded_md5, count)) for count in range(3)]
         self.client.logger.debug('Generating backup file producer queues')
-        producers = [asyncio.create_task(self.__produce_backup_files(backup_queue, directory_paths, skip_files, file_names_pending_upload)) for _ in range(1)]
+        producers = [asyncio.create_task(self.__produce_backup_files(directory_queue, backup_queue, skip_files, file_names_pending_upload, count)) for count in range(1)]
         self.client.logger.debug('Waiting for all threads to complete')
         await asyncio.wait(producers + backup_consumers + upload_consumers)
 

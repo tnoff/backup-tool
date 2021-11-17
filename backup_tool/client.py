@@ -205,7 +205,7 @@ class BackupClient():
                 upload_file = False
         return upload_file
 
-    def _file_backup_upload(self, crypto_file, local_crypto_file_md5, offset, local_backup_file):
+    def _file_backup_upload(self, crypto_file, local_crypto_file_md5, offset, local_backup_file, object_path=None):
         # Check if md5 file already exists
         backup_entry = self.db_session.query(BackupEntry).\
                 filter(BackupEntry.uploaded_md5_checksum == local_crypto_file_md5).first()
@@ -221,7 +221,7 @@ class BackupClient():
 
         # Else upload new file
         self.logger.info(f'No encrypted upload matching file with md5 {local_crypto_file_md5}, uploading copy')
-        object_path = self._generate_uuid()
+        object_path = object_path or self._generate_uuid()
 
         self.logger.debug(f'Uploading encrypted file "{str(crypto_file)}" to object path {object_path}')
         self.os_client.object_put(self.oci_namespace, self.oci_bucket, object_path, str(crypto_file),
