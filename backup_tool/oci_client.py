@@ -39,15 +39,12 @@ class OCIObjectStorageClient():
         namespace_name  :   Object Storage Namespace
         bucket_name     :   Bucket Name
         '''
-        all_objects = []
-        next_page = None
-        fields = "name,md5,size,timeCreated"
         self.logger.info("Retrieving object list from namespace %s and bucket %s",
                          namespace_name, bucket_name)
         kwargs = {
             'namespace_name': namespace_name,
             'bucket_name': bucket_name,
-            'fields': fields,
+            'fields': 'name,md5,size,timeCreated',
         }
         all_objects_response = list_call_get_all_results(self.object_storage_client.list_objects, **kwargs)
         return [to_dict(obj) for obj in all_objects_response.data.objects]

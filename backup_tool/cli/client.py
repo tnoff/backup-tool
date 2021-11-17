@@ -133,7 +133,7 @@ class ClientCLI():
                 object_path = self.cache_json['backup']['pending_upload'][upload_data['local_file']]['object_path']
                 resume_upload = True
             except KeyError:
-                object_path = self.client._generate_uuid()
+                object_path = self.client._generate_uuid() #pylint:disable=protected-access
                 self.cache_json['backup']['pending_upload'][upload_data['local_file']]['object_path'] = object_path
             self.client._file_backup_upload(upload_data['crypto_file'], #pylint:disable=protected-access
                                             upload_data['crypto_file_md5'],
