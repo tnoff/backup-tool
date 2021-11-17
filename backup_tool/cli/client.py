@@ -128,8 +128,10 @@ class ClientCLI():
             upload_data = await upload_queue.get()
             local_backup_file = self.client.db_session.query(BackupEntryLocalFile).get(upload_data['local_backup_file_id'])
             self.client.logger.debug(f'Upload consumer thread {thread_count}, uploading crypto of file {str(upload_data["local_file"])}')
+            resume_upload = False
             try:
                 object_path = self.cache_json['backup']['pending_upload'][upload_data['local_file']]['object_path']
+                resume_upload = True
             except KeyError:
                 object_path = self.client._generate_uuid()
                 self.cache_json['backup']['pending_upload'][upload_data['local_file']]['object_path'] = object_path
@@ -137,7 +139,8 @@ class ClientCLI():
                                             upload_data['crypto_file_md5'],
                                             upload_data['offset'],
                                             local_backup_file,
-                                            object_path=object_path)
+                                            object_path=object_path,
+                                            resume_upload=resume_upload)
             self.cache_json['backup']['processed'].append(str(upload_data['local_file']))
             del self.cache_json['backup']['pending_upload'][upload_data['local_file']]
             upload_queue.task_done()
