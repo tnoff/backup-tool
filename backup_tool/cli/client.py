@@ -11,9 +11,10 @@ from backup_tool.exception import CLIException
 from backup_tool.client import BackupClient
 from backup_tool.cli.common import CommonArgparse
 from backup_tool.database import BackupEntryLocalFile
+from backup_tool import utils
 
 HOME_PATH = Path(os.path.expanduser('~'))
-DEFAULT_SETTINGS_FILE = HOME_PATH/ '.backup-tool' / 'config'
+DEFAULT_SETTINGS_FILE = HOME_PATH / '.backup-tool' / 'config'
 
 class ClientCLI():
     '''
@@ -110,39 +111,47 @@ class ClientCLI():
     async def __consume_backup_files(self, backup_queue, upload_queue, overwrite, check_uploaded_md5, thread_count):
         self.client.logger.debug(f'Starting backup consumer thread {thread_count}')
         while True:
-            file_name = await backup_queue.get()
-            self.client.logger.debug(f'Backup consumer thread {thread_count}, backing up file {file_name}')
-            upload_data = self.client.file_backup(file_name, overwrite=overwrite, check_uploaded_md5=check_uploaded_md5, automatically_upload_files=False)
-            if upload_data == {}:
-                self.cache_json['backup']['processed'].append(file_name)
+            local_file_path = await backup_queue.get()
+            self.client.logger.debug(f'Backup consumer thread {thread_count}, backing up file {local_file_path}')
+            local_file_md5 = utils.md5(local_file_path)
+            self.client.logger.debug(f'Local file "{str(local_file_path)}" has md5 {local_file_md5}')
+            should_upload_file, local_backup_file = self.client._file_backup_ensure_database_entry(local_file_path, #pylint:disable=protected-access
+                                                                                                   local_file_md5,
+                                                                                                   overwrite,
+                                                                                                   check_uploaded_md5)
+            if not should_upload_file:
+                self.cache_json['backup']['processed'].append(local_file_path)
             else:
-                upload_data_key = upload_data.pop('local_file')
-                self.cache_json['backup']['pending_upload'][upload_data_key] = upload_data
-                await upload_queue.put(upload_data)
+                encryption_data = self.client._file_backup_encrypt(local_file_path, local_file_md5) #pylint:disable=protected-access
+                encryption_data_key = encryption_data.pop('local_file')
+                encryption_data['local_backup_file_id'] = local_backup_file.id
+                self.cache_json['backup']['pending_upload'][encryption_data_key] = encryption_data
+                await upload_queue.put(encryption_data)
             backup_queue.task_done()
             await asyncio.sleep(1)
 
     async def __consume_upload_files(self, upload_queue, thread_count):
         self.client.logger.debug(f'Starting upload consumer thread {thread_count}')
         while True:
-            upload_data = await upload_queue.get()
-            local_backup_file = self.client.db_session.query(BackupEntryLocalFile).get(upload_data['local_backup_file_id'])
-            self.client.logger.debug(f'Upload consumer thread {thread_count}, uploading crypto of file {str(upload_data["local_file"])}')
+            encryption_data = await upload_queue.get()
+            local_backup_file = self.client.db_session.query(BackupEntryLocalFile).get(encryption_data['local_backup_file_id'])
+            self.client.logger.debug(f'Upload consumer thread {thread_count}, uploading crypto of file {str(encryption_data["local_file"])}')
             resume_upload = False
             try:
-                object_path = self.cache_json['backup']['pending_upload'][upload_data['local_file']]['object_path']
+                object_path = self.cache_json['backup']['pending_upload'][encryption_data['local_file']]['object_path']
                 resume_upload = True
             except KeyError:
                 object_path = self.client._generate_uuid() #pylint:disable=protected-access
-                self.cache_json['backup']['pending_upload'][upload_data['local_file']]['object_path'] = object_path
-            self.client._file_backup_upload(upload_data['crypto_file'], #pylint:disable=protected-access
-                                            upload_data['crypto_file_md5'],
-                                            upload_data['offset'],
+                self.cache_json['backup']['pending_upload'][encryption_data['local_file']]['object_path'] = object_path
+            self.client._file_backup_upload(encryption_data['encrypted_file'], #pylint:disable=protected-access
+                                            encryption_data['encrypted_file_md5'],
+                                            encryption_data['offset'],
                                             local_backup_file,
                                             object_path=object_path,
                                             resume_upload=resume_upload)
-            self.cache_json['backup']['processed'].append(str(upload_data['local_file']))
-            del self.cache_json['backup']['pending_upload'][upload_data['local_file']]
+            self.cache_json['backup']['processed'].append(str(encryption_data['local_file']))
+            del self.cache_json['backup']['pending_upload'][encryption_data['local_file']]
+            Path(encryption_data['encrypted_file']).unlink()
             upload_queue.task_done()
             await asyncio.sleep(1)
 
@@ -178,12 +187,12 @@ class ClientCLI():
             skip_files = [skip_files]
 
         backup_queue = asyncio.Queue()
-        upload_queue = asyncio.Queue()
+        upload_queue = asyncio.Queue(maxsize=5)
         # Check files that need to be uploaded still
         file_names_pending_upload = []
-        for local_file, upload_data in self.cache_json['backup']['pending_upload'].items():
-            upload_data['local_file'] = local_file
-            await upload_queue.put(upload_data)
+        for local_file, encryption_data in self.cache_json['backup']['pending_upload'].items():
+            encryption_data['local_file'] = local_file
+            await upload_queue.put(encryption_data)
             file_names_pending_upload.append(local_file)
 
         self.client.logger.debug('Generating upload file consumer queues')
@@ -275,7 +284,7 @@ def parse_args(args): #pylint:disable=too-many-locals,too-many-statements
 
     # Directory backup
     dir_backup = dir_sub_parser.add_parser('backup', help='Backup file')
-    dir_backup.add_argument('dir_paths', nargs='+', help='Directory local path')
+    dir_backup.add_argument('--dir-paths', nargs='+', required=True, help='Directory local path')
     dir_backup.add_argument('--overwrite', '-o', action='store_true', help='Overwrite copy in database')
     dir_backup.add_argument('--check-uploaded-md5', '-m', action='store_true', help='Check uploaded md5 matches expected')
     dir_backup.add_argument('--skip-files', '-f', nargs='+', help='Skip files matching regexes')

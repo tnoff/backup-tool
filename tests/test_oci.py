@@ -58,7 +58,7 @@ def test_object_list(mocker):
                  side_effect=to_dict_mock)
     client = OCIObjectStorageClient(FAKE_CONFIG, FAKE_SECTION)
     # Make sure to pass page limit of 1
-    objects = client.object_list(FAKE_NAMESPACE, FAKE_BUCKET, page_limit=1)
+    objects = client.object_list(FAKE_NAMESPACE, FAKE_BUCKET)
     assert len(objects) == 1
     assert objects[0]['name'] == fake_name
 
@@ -81,7 +81,7 @@ def test_object_list_invalid_status(mocker):
                  side_effect=to_dict_mock)
     client = OCIObjectStorageClient(FAKE_CONFIG, FAKE_SECTION)
     with pytest.raises(ObjectStorageException) as error:
-        client.object_list(FAKE_NAMESPACE, FAKE_BUCKET, page_limit=1)
+        client.object_list(FAKE_NAMESPACE, FAKE_BUCKET)
     assert str(error.value) == 'Error list objects, Reponse code 400'
 
 def test_object_list_raise_exception(mocker):
@@ -103,7 +103,7 @@ def test_object_list_raise_exception(mocker):
                  side_effect=to_dict_mock)
     client = OCIObjectStorageClient(FAKE_CONFIG, FAKE_SECTION)
     with pytest.raises(ObjectStorageException) as error:
-        client.object_list(FAKE_NAMESPACE, FAKE_BUCKET, page_limit=1)
+        client.object_list(FAKE_NAMESPACE, FAKE_BUCKET)
 
 
 #

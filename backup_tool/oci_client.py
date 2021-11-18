@@ -41,12 +41,8 @@ class OCIObjectStorageClient():
         '''
         self.logger.info("Retrieving object list from namespace %s and bucket %s",
                          namespace_name, bucket_name)
-        kwargs = {
-            'namespace_name': namespace_name,
-            'bucket_name': bucket_name,
-            'fields': 'name,md5,size,timeCreated',
-        }
-        all_objects_response = list_call_get_all_results(self.object_storage_client.list_objects, **kwargs)
+        all_objects_response = list_call_get_all_results(self.object_storage_client.list_objects,
+                                                         namespace_name, bucket_name, fields='name,md5,size,timeCreated')
         return [to_dict(obj) for obj in all_objects_response.data.objects]
 
 
@@ -65,11 +61,8 @@ class OCIObjectStorageClient():
         upload_resumed = False
         if resume_upload:
             self.logger.debug(f'Checking if object name "{object_name}" is in list of pending uploads')
-            kwargs = {
-                'namespace_name': namespace_name,
-                'bucket_name': bucket_name,
-            }
-            multipart_uploads = list_call_get_all_results(self.object_storage_client.list_multipart_uploads, **kwargs)
+            multipart_uploads = list_call_get_all_results(self.object_storage_client.list_multipart_uploads,
+                                                          namespace_name, bucket_name)
             for multipart_upload in multipart_uploads.data:
                 # Assume namespace and bucket are the same
                 if multipart_upload.object == object_name:
