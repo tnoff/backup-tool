@@ -1,5 +1,6 @@
 import shutil
 
+from oci.auth.signers import InstancePrincipalsSecurityTokenSigner
 from oci.config import from_file
 from oci.retry import DEFAULT_RETRY_STRATEGY
 from oci.exceptions import ServiceError
@@ -16,16 +17,21 @@ class OCIObjectStorageClient():
     '''
     Object Storage Client
     '''
-    def __init__(self, config_file, config_section, logger=None):
+    def __init__(self, config_file, config_section, logger=None, instance_principal=False):
         '''
         Create ObjectStorageClient for OCI
 
-        config_file     :   OCI Configuration File
-        config_section  :   OCI Config File Section
-        logger          :   Logger, if not given one will be created
+        config_file         :   OCI Configuration File
+        config_section      :   OCI Config File Section
+        logger              :   Logger, if not given one will be created
+        instance_principal  :   Use instance principal for auth
         '''
-        config = from_file(config_file, config_section)
-        self.object_storage_client = ObjectStorageClient(config, retry_strategy=DEFAULT_RETRY_STRATEGY)
+        if not instance_principal:
+            config = from_file(config_file, config_section)
+            self.object_storage_client = ObjectStorageClient(config, retry_strategy=DEFAULT_RETRY_STRATEGY)
+        else:
+            signer = InstancePrincipalsSecurityTokenSigner()
+            iself.object_storage_client = ObjectStorageClient(config={}, signer=signer, retry_strategy=DEFAULT_RETRY_STRATEGY)
         self.upload_manager = UploadManager(self.object_storage_client)
         if logger is None:
             self.logger = setup_logger("oci_client", 10)

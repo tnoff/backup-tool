@@ -15,7 +15,7 @@ class BackupClient():
     Backup Client
     '''
     def __init__(self, database_file, crypto_key, oci_config_file, oci_config_section, oci_namespace, oci_bucket,
-                 work_directory, logging_file=None, relative_path=None):
+                 work_directory, logging_file=None, relative_path=None, oci_instance_principal=False):
         '''
         Backup Client
 
@@ -38,6 +38,9 @@ class BackupClient():
         So if the database has "Documents/essay.txt", the full path of the restored file will be "/home/user/Documents/essay.txt"
 
         The basic idea here is to make moving files between different types of machines easier
+
+        oci_instance_principal  : Use instance principal auth for client
+
         '''
 
         self.logger = utils.setup_logger('backup_client', 10, logging_file=logging_file)
@@ -65,7 +68,8 @@ class BackupClient():
         self.oci_namespace = oci_namespace
         self.oci_bucket = oci_bucket
         if self.oci_namespace and self.oci_bucket:
-            self.os_client = OCIObjectStorageClient(oci_config_file, oci_config_section, logger=self.logger)
+            self.os_client = OCIObjectStorageClient(oci_config_file, oci_config_section,
+                                                    instance_principal=oci_instance_principal, logger=self.logger)
 
     def _generate_uuid(self):
         '''

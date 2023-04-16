@@ -42,6 +42,7 @@ class ClientCLI():
 
             'oci_config_file': kwargs.pop('oci_config_file', None),
             'oci_config_section': kwargs.pop('oci_config_section', None),
+            'oci_instance_principal': kwargs.pop('oci_instance_principal', None),
             'oci_namespace': kwargs.pop('oci_namespace', None),
             'oci_bucket': kwargs.pop('oci_bucket', None),
         }
@@ -301,6 +302,7 @@ def load_settings(settings_file):
         'oci_bucket' : ['oci', 'bucket'],
         'oci_config_file' : ['oci', 'config_file'],
         'oci_config_section' : ['oci', 'config_section'],
+        'oci_instance_principal': ['oci', 'instance_principal'],
     }
     return_data = {}
     for key_name, args in mapping.items():
