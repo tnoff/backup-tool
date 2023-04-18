@@ -46,10 +46,10 @@ class BackupClient():
         self.logger = utils.setup_logger('backup_client', 10, logging_file=logging_file)
 
         if database_file is None:
-            engine = create_engine('sqlite:///', encoding='utf-8')
+            engine = create_engine('sqlite:///')
             self.logger.debug('Initializing database with no file')
         else:
-            engine = create_engine(f'sqlite:///{database_file}', encoding='utf-8')
+            engine = create_engine(f'sqlite:///{database_file}')
             self.logger.debug(f'Initializing database with file: "{database_file}"')
 
         BASE.metadata.create_all(engine)
