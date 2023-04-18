@@ -7,7 +7,7 @@ setuptools.setup(
     author_email='ty_north@yahoo.com',
     install_requires=[
         'oci >= 2.2.0',
-        'pycrypto >= 2.6.1',
+        'pycryptodome >= 3.17',
         'SQLAlchemy >= 1.3.8',
     ],
     entry_points={

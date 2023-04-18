@@ -16,7 +16,7 @@ def encrypt_file(input_file, output_file, passphrase, chunksize=64*1024): #pylin
     chunksize   :   Sets the size of the chunk which the function uses to read and encrypt the file
     '''
     iv = os.urandom(16)
-    encryptor = AES.new(passphrase, AES.MODE_CBC, iv)
+    encryptor = AES.new(passphrase.encode('utf-8'), AES.MODE_CBC, iv)
     filesize = os.path.getsize(input_file)
 
     original_hash_value = hashlib.md5()
@@ -63,7 +63,7 @@ def decrypt_file(input_file, output_file, passphrase, chunksize=24*1024): #pylin
         iv = infile.read(16)
         original_hash_value.update(iv)
 
-        decryptor = AES.new(passphrase, AES.MODE_CBC, iv)
+        decryptor = AES.new(passphrase.encode('utf-8'), AES.MODE_CBC, iv)
         total_size = 0
         with open(output_file, 'wb') as outfile:
             while True:
