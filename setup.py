@@ -16,5 +16,5 @@ setuptools.setup(
         ]
     },
     packages=setuptools.find_packages(exclude=['htmlcov','tests']),
-    version='0.1.0',
+    version='0.1.1',
 )
