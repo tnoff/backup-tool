@@ -78,7 +78,7 @@ def setup_logger(name, log_file_level, logging_file=None,
     if logging_file is not None:
         fh = RotatingFileHandler(logging_file,
                                  backupCount=4,
-                                 maxBytes=((2 ** 20) * 10))
+                                 maxBytes=(2 ** 20) * 10)
         fh.setLevel(log_file_level)
         fh.setFormatter(formatter)
         logger.addHandler(fh)

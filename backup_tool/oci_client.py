@@ -31,7 +31,7 @@ class OCIObjectStorageClient():
             self.object_storage_client = ObjectStorageClient(config, retry_strategy=DEFAULT_RETRY_STRATEGY)
         else:
             signer = InstancePrincipalsSecurityTokenSigner()
-            iself.object_storage_client = ObjectStorageClient(config={}, signer=signer, retry_strategy=DEFAULT_RETRY_STRATEGY)
+            self.object_storage_client = ObjectStorageClient(config={}, signer=signer, retry_strategy=DEFAULT_RETRY_STRATEGY)
         self.upload_manager = UploadManager(self.object_storage_client)
         if logger is None:
             self.logger = setup_logger("oci_client", 10)

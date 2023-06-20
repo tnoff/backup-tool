@@ -1,10 +1,12 @@
-from configparser import NoSectionError, NoOptionError, SafeConfigParser
 import json
 import os
-from pathlib import Path
 import re
 import sys
 from tempfile import TemporaryDirectory
+
+from pathlib import Path
+from yaml import safe_load
+from yaml.parser import ParserError
 
 from backup_tool.exception import CLIException
 from backup_tool.client import BackupClient
@@ -23,7 +25,10 @@ class ClientCLI():
         '''
         Backup Client
         '''
-        crypto_key = kwargs.pop('crypto_key_file', None)
+        general_config = kwargs.pop('general', {})
+        oci_config = kwargs.pop('oci', {})
+
+        crypto_key = general_config.pop('crypto_key_file', None)
         if crypto_key:
             key_file_path = Path(crypto_key)
             if key_file_path.exists():
@@ -34,17 +39,17 @@ class ClientCLI():
         self.temporary_directory = TemporaryDirectory() #pylint:disable=consider-using-with
 
         client_kwargs = {
-            'database_file': kwargs.pop('database_file', None),
+            'database_file': general_config.pop('database_file', None),
             'crypto_key': crypto_key,
-            'work_directory': kwargs.pop('work_directory', self.temporary_directory.name),
-            'logging_file': kwargs.pop('logging_file', None),
-            'relative_path': kwargs.pop('relative_path', None),
+            'work_directory': general_config.pop('work_directory', self.temporary_directory.name),
+            'logging_file': general_config.pop('logging_file', None),
+            'relative_path': general_config.pop('relative_path', None),
 
-            'oci_config_file': kwargs.pop('oci_config_file', None),
-            'oci_config_section': kwargs.pop('oci_config_section', None),
-            'oci_instance_principal': kwargs.pop('oci_instance_principal', None),
-            'oci_namespace': kwargs.pop('oci_namespace', None),
-            'oci_bucket': kwargs.pop('oci_bucket', None),
+            'oci_config_file': oci_config.pop('config_file', None),
+            'oci_config_section': oci_config.pop('config_section', None),
+            'oci_instance_principal': oci_config.pop('instance_principal', None),
+            'oci_namespace': oci_config.pop('namespace', None),
+            'oci_bucket': oci_config.pop('bucket', None),
         }
 
         self.client = BackupClient(**client_kwargs)
@@ -196,16 +201,6 @@ def parse_args(args): #pylint:disable=too-many-locals,too-many-statements
     parser = CommonArgparse(description='Backup Tool CLI')
     parser.add_argument('-s', '--settings-file', default=str(DEFAULT_SETTINGS_FILE),
                         help='Settings file')
-    parser.add_argument('-d', '--database-file', help='Client sqlite database file')
-    parser.add_argument('-l', '--logging-file', help='Logging file')
-    parser.add_argument('-k', '--crypto-key-file', help='Cryto key file')
-    parser.add_argument('-r', '--relative-path', help='Relative file path')
-    parser.add_argument('-w', '--work-directory', help='Work directory for temp files')
-
-    parser.add_argument('-c', '--oci-config-file', help='OCI Config File')
-    parser.add_argument('-cs', '--oci-config-section', help='OCI Config Stage')
-    parser.add_argument('-n', '--oci-namespace', help='Object storage namespace')
-    parser.add_argument('-b', '--oci-bucket', help='Object storage bucket')
 
 
     # Sub parsers
@@ -290,28 +285,11 @@ def load_settings(settings_file):
     '''
     if settings_file is None:
         return {}
-    parser = SafeConfigParser()
-    parser.read(settings_file)
-    mapping = {
-        'database_file' : ['general', 'database_file'],
-        'logging_file' : ['general', 'logging_file'],
-        'crypto_key_file' : ['general', 'crypto_key_file'],
-        'relative_path' : ['general', 'relative_path'],
-
-        'oci_namespace' : ['oci', 'namespace'],
-        'oci_bucket' : ['oci', 'bucket'],
-        'oci_config_file' : ['oci', 'config_file'],
-        'oci_config_section' : ['oci', 'config_section'],
-        'oci_instance_principal': ['oci', 'instance_principal'],
-    }
-    return_data = {}
-    for key_name, args in mapping.items():
+    with open(settings_file, 'r', encoding='utf-8') as reader:
         try:
-            value = parser.get(*args)
-            return_data[key_name] = value
-        except (NoSectionError, NoOptionError):
-            pass
-    return return_data
+            return safe_load(reader) or {}
+        except ParserError:
+            return {}
 
 def generate_args(command_line_args):
     '''
@@ -320,13 +298,9 @@ def generate_args(command_line_args):
     Any argument given via cli will override one from settings file
     '''
     cli_args = parse_args(command_line_args)
-    args = load_settings(cli_args.pop('settings_file', None))
-    override_args = {}
-    for k, v in cli_args.items():
-        if v is not None:
-            override_args[k] = v
-    args.update(override_args)
-    return args
+    settings = load_settings(cli_args.pop('settings_file', None))
+    settings.update(cli_args)
+    return settings
 
 def main():
     '''

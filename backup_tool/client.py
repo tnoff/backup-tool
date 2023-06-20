@@ -148,7 +148,7 @@ class BackupClient():
                 return False
         return True
 
-    def file_md5(self, local_file): #pylint: disable=no-self-use
+    def file_md5(self, local_file):
         '''
         Get md5sum of local file
 
@@ -221,7 +221,7 @@ class BackupClient():
     def _file_backup_ensure_database_entry(self, local_file_path, local_file_md5, overwrite):
         relative_file_path = local_file_path
         if self.relative_path:
-            relative_file_path = (local_file_path.relative_to(self.relative_path))
+            relative_file_path = local_file_path.relative_to(self.relative_path)
             self.logger.debug(f'Using relative path for database "{str(relative_file_path)}"')
         local_backup_file = self.db_session.query(BackupEntryLocalFile).\
             filter(BackupEntryLocalFile.local_file_path == str(relative_file_path)).first()

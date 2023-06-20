@@ -25,50 +25,6 @@ def test_global_args():
     args = parse_args(['--settings-file', 'settings.conf', 'file', 'list'])
     assert args.pop('settings_file') == 'settings.conf'
 
-    args = parse_args(['-d', 'db.sql', 'file', 'list'])
-    assert args.pop('database_file') == 'db.sql'
-    args = parse_args(['--database-file', 'db.sql', 'file', 'list'])
-    assert args.pop('database_file') == 'db.sql'
-
-    args = parse_args(['-l', 'log-file', 'file', 'list'])
-    assert args.pop('logging_file') == 'log-file'
-    args = parse_args(['--logging-file', 'log-file', 'file', 'list'])
-    assert args.pop('logging_file') == 'log-file'
-
-    args = parse_args(['-k', 'key-file', 'file', 'list'])
-    assert args.pop('crypto_key_file') == 'key-file'
-    args = parse_args(['--crypto-key-file', 'key-file', 'file', 'list'])
-    assert args.pop('crypto_key_file') == 'key-file'
-
-    args = parse_args(['-r', '/home/foo', 'file', 'list'])
-    assert args.pop('relative_path') == '/home/foo'
-    args = parse_args(['--relative-path', '/home/foo', 'file', 'list'])
-    assert args.pop('relative_path') == '/home/foo'
-
-    args = parse_args(['-w', '/tmp/back', 'file', 'list'])
-    assert args.pop('work_directory') == '/tmp/back'
-    args = parse_args(['--work-directory', '/tmp/back', 'file', 'list'])
-    assert args.pop('work_directory') == '/tmp/back'
-
-    args = parse_args(['-c', 'oci.conf', 'file', 'list'])
-    assert args.pop('oci_config_file') == 'oci.conf'
-    args = parse_args(['--oci-config-file', 'oci.conf', 'file', 'list'])
-    assert args.pop('oci_config_file') == 'oci.conf'
-
-    args = parse_args(['-cs', 'DEFAULT', 'file', 'list'])
-    assert args.pop('oci_config_section') == 'DEFAULT'
-    args = parse_args(['--oci-config-section', 'DEFAULT', 'file', 'list'])
-    assert args.pop('oci_config_section') == 'DEFAULT'
-
-    args = parse_args(['-n', 'foo-namespace', 'file', 'list'])
-    assert args.pop('oci_namespace') == 'foo-namespace'
-    args = parse_args(['--oci-namespace', 'foo-namespace', 'file', 'list'])
-    assert args.pop('oci_namespace') == 'foo-namespace'
-
-    args = parse_args(['-b', 'bar-bucket', 'file', 'list'])
-    assert args.pop('oci_bucket') == 'bar-bucket'
-    args = parse_args(['--oci-bucket', 'bar-bucket', 'file', 'list'])
-    assert args.pop('oci_bucket') == 'bar-bucket'
 
     blank_args = parse_args(['file', 'list'])
     assert blank_args.pop('module') == 'file'
@@ -257,31 +213,31 @@ def test_load_settings():
         with utils.temp_file(tmp_dir) as settings_file:
             settings_file.write_text(' ')
             result = load_settings(str(settings_file))
-        assert result == {} 
+        assert result == {}
 
         with utils.temp_file(tmp_dir) as settings_file:
-            settings_file.write_text('[general]\nlogging_file = foo.log\ndatabase_file = db.sql')
+            settings_file.write_text('general:\n  logging_file: foo.log\n  database_file: db.sql')
             result = load_settings(str(settings_file))
-        assert result['logging_file'] == 'foo.log'
-        assert result['database_file'] == 'db.sql'
+        assert result['general']['logging_file'] == 'foo.log'
+        assert result['general']['database_file'] == 'db.sql'
 
         with utils.temp_file(tmp_dir) as settings_file:
-            settings_file.write_text('[general]\ncrypto_key_file = /home/foo/key\nrelative_path = /home/foo')
+            settings_file.write_text('general:\n  crypto_key_file: /home/foo/key\n  relative_path: /home/foo')
             result = load_settings(str(settings_file))
-        assert result['crypto_key_file'] == '/home/foo/key'
-        assert result['relative_path'] == '/home/foo'
+        assert result['general']['crypto_key_file'] == '/home/foo/key'
+        assert result['general']['relative_path'] == '/home/foo'
 
         with utils.temp_file(tmp_dir) as settings_file:
-            settings_file.write_text('[oci]\nconfig_file = /home/oci/config\nconfig_section = DEFAULT')
+            settings_file.write_text('oci:\n  config_file: /home/oci/config\n  config_section: DEFAULT')
             result = load_settings(str(settings_file))
-        assert result['oci_config_file'] == '/home/oci/config'
-        assert result['oci_config_section'] == 'DEFAULT'
+        assert result['oci']['config_file'] == '/home/oci/config'
+        assert result['oci']['config_section'] == 'DEFAULT'
 
         with utils.temp_file(tmp_dir) as settings_file:
-            settings_file.write_text('[oci]\nnamespace = foo\nbucket = bar')
+            settings_file.write_text('oci:\n  namespace: foo\n  bucket: bar')
             result = load_settings(str(settings_file))
-        assert result['oci_namespace'] == 'foo'
-        assert result['oci_bucket'] == 'bar'
+        assert result['oci']['namespace'] == 'foo'
+        assert result['oci']['bucket'] == 'bar'
 
 def test_generate_args():
     result = generate_args(['file', 'list'])
@@ -290,13 +246,9 @@ def test_generate_args():
 
     with TemporaryDirectory() as tmp_dir:
         with utils.temp_file(tmp_dir) as settings_file:
-            settings_file.write_text('[general]\nlogging_file = foo.log')
+            settings_file.write_text('general:\n  logging_file: foo.log')
             result = generate_args(['-s', str(settings_file), 'file', 'list'])
-            assert result['logging_file'] == 'foo.log'
-        with utils.temp_file(tmp_dir) as settings_file:
-            settings_file.write_text('[general]\nlogging_file = foo.log')
-            result = generate_args(['-s', str(settings_file), '-l', 'bar.log', 'file', 'list'])
-            assert result['logging_file'] == 'bar.log'
+            assert result['general']['logging_file'] == 'foo.log'
 
 @patch('builtins.print')
 def test_cli_client(mocker):

@@ -6,9 +6,11 @@ setuptools.setup(
     author='Tyler D. North',
     author_email='ty_north@yahoo.com',
     install_requires=[
-        'oci >= 2.2.0',
-        'pycryptodome >= 3.17',
-        'SQLAlchemy >= 1.3.8',
+        'oci == 2.104.2',
+        'pathlib == 1.0.1',
+        'pycryptodome == 3.18',
+        'PyYAML == 6.0',
+        'SQLAlchemy == 2.0.16',
     ],
     entry_points={
         'console_scripts' : [
