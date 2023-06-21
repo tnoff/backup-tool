@@ -48,7 +48,6 @@ class ClientCLI():
             'oci_config_file': oci_config.pop('config_file', None),
             'oci_config_section': oci_config.pop('config_section', None),
             'oci_instance_principal': oci_config.pop('instance_principal', None),
-            'oci_namespace': oci_config.pop('namespace', None),
             'oci_bucket': oci_config.pop('bucket', None),
         }
 

@@ -14,7 +14,7 @@ class BackupClient():
     '''
     Backup Client
     '''
-    def __init__(self, database_file, crypto_key, oci_config_file, oci_config_section, oci_namespace, oci_bucket,
+    def __init__(self, database_file, crypto_key, oci_config_file, oci_config_section, oci_bucket,
                  work_directory, logging_file=None, relative_path=None, oci_instance_principal=False):
         '''
         Backup Client
@@ -23,7 +23,6 @@ class BackupClient():
         crypto_key      :   Crytography Passphrase
         oci_config_file :   Path of OCI Config File
         oci_config_section  : Path of OCI Config Section
-        oci_namespace   :   OCI Object Storage Namespace
         oci_bucket      :   OCI Object Storage Bucket
         logging_file    :   Path for logging file
         work_directory  :   Directory for temporary files to be written to
@@ -65,11 +64,16 @@ class BackupClient():
         if not self.work_directory.exists():
             self.work_directory.mkdir(parents=True)
 
-        self.oci_namespace = oci_namespace
-        self.oci_bucket = oci_bucket
-        if self.oci_namespace and self.oci_bucket:
-            self.os_client = OCIObjectStorageClient(oci_config_file, oci_config_section,
-                                                    instance_principal=oci_instance_principal, logger=self.logger)
+        self.os_client = None
+        if oci_bucket:
+            kwargs = {
+                'oci_config_file': oci_config_file,
+                'oci_config_section': oci_config_section,
+                'instance_principal': oci_instance_principal,
+                'logger': self.logger,
+                'oci_bucket_name': oci_bucket,
+            }
+            self.os_client = OCIObjectStorageClient(**kwargs)
 
     def _generate_uuid(self):
         '''
@@ -125,8 +129,7 @@ class BackupClient():
         # Write file to temp dir
         with utils.temp_file(self.work_directory) as encrypted_file:
             self.logger.info(f'Downloading object {backup_entry.uploaded_file_path} to temp file "{str(encrypted_file)}"')
-            self.os_client.object_get(self.oci_namespace, self.oci_bucket,
-                                      backup_entry.uploaded_file_path, str(encrypted_file), set_restore=set_restore)
+            self.os_client.object_get(backup_entry.uploaded_file_path, str(encrypted_file), set_restore=set_restore)
             self.logger.info(f'Downloaded of object {backup_entry.uploaded_file_path} complete, written to temp file "{str(encrypted_file)}"')
 
             # Ensure dir of new decrypted file is created
@@ -258,7 +261,7 @@ class BackupClient():
     def _file_backup_upload(self, encrypted_file, local_encrypted_file_md5, original_md5_checksum, local_backup_file, object_path=None, resume_upload=False):
         object_path = object_path or self._generate_uuid()
         self.logger.debug(f'Uploading encrypted file "{str(encrypted_file)}" to object path {object_path}')
-        self.os_client.object_put(self.oci_namespace, self.oci_bucket, object_path, str(encrypted_file),
+        self.os_client.object_put(object_path, str(encrypted_file),
                                   md5_sum=local_encrypted_file_md5, resume_upload=resume_upload)
 
         backup_args = {
@@ -356,7 +359,7 @@ class BackupClient():
 
         for backup in self.db_session.query(BackupEntry).filter(BackupEntry.id.in_(extra_backup_entries)):
             if not dry_run:
-                self.os_client.object_delete(self.oci_namespace, self.oci_bucket, backup.uploaded_file_path)
+                self.os_client.object_delete( backup.uploaded_file_path)
                 self.db_session.query(BackupEntry).filter_by(id=backup.id).delete()
                 self.db_session.commit()
         return extra_backup_entries
