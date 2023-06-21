@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 
 from backup_tool import crypto
 from backup_tool.exception import BackupToolClientException
-from backup_tool.oci_client import OCIObjectStorageClient
+from backup_tool.storage.oci import OCIObjectStorageClient
 from backup_tool.database import BASE, BackupEntry, BackupEntryLocalFile
 from backup_tool import utils
 
@@ -14,16 +14,15 @@ class BackupClient():
     '''
     Backup Client
     '''
-    def __init__(self, database_file, crypto_key, oci_config_file, oci_config_section, oci_bucket,
-                 work_directory, logging_file=None, relative_path=None, oci_instance_principal=False):
+    def __init__(self, database_file, crypto_key, storage_option, storage_kwargs,
+                 work_directory, logging_file=None, relative_path=None):
         '''
         Backup Client
 
         database_file   :   Path for sqlite database
         crypto_key      :   Crytography Passphrase
-        oci_config_file :   Path of OCI Config File
-        oci_config_section  : Path of OCI Config Section
-        oci_bucket      :   OCI Object Storage Bucket
+        storage_option  :   Which storage solution to choose from. Currently only 'oci' is supported
+        storage_kwargs  :   Args to pass into storage client
         logging_file    :   Path for logging file
         work_directory  :   Directory for temporary files to be written to
         relative_path   :   Where files should be placed relative to machine
@@ -35,11 +34,6 @@ class BackupClient():
 
         Then when restoring files, the relative path will be added to the prefix of the files in the database.
         So if the database has "Documents/essay.txt", the full path of the restored file will be "/home/user/Documents/essay.txt"
-
-        The basic idea here is to make moving files between different types of machines easier
-
-        oci_instance_principal  : Use instance principal auth for client
-
         '''
 
         self.logger = utils.setup_logger('backup_client', 10, logging_file=logging_file)
@@ -65,15 +59,10 @@ class BackupClient():
             self.work_directory.mkdir(parents=True)
 
         self.os_client = None
-        if oci_bucket:
-            kwargs = {
-                'oci_config_file': oci_config_file,
-                'oci_config_section': oci_config_section,
-                'instance_principal': oci_instance_principal,
-                'logger': self.logger,
-                'oci_bucket_name': oci_bucket,
-            }
-            self.os_client = OCIObjectStorageClient(**kwargs)
+
+        if storage_option == 'oci':
+            storage_kwargs['logger'] = self.logger
+            self.os_client = OCIObjectStorageClient(**storage_kwargs)
 
     def _generate_uuid(self):
         '''

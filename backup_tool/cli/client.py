@@ -44,12 +44,17 @@ class ClientCLI():
             'work_directory': general_config.pop('work_directory', self.temporary_directory.name),
             'logging_file': general_config.pop('logging_file', None),
             'relative_path': general_config.pop('relative_path', None),
-
-            'oci_config_file': oci_config.pop('config_file', None),
-            'oci_config_section': oci_config.pop('config_section', None),
-            'oci_instance_principal': oci_config.pop('instance_principal', None),
-            'oci_bucket': oci_config.pop('bucket', None),
+            'storage_option': general_config.pop('storage_option', None),
         }
+
+        client_kwargs['storage_kwargs'] = {}
+        if oci_config:
+            client_kwargs['storage_kwargs'] = {
+                'config_file': oci_config.pop('config_file', None),
+                'config_section': oci_config.pop('config_section', None),
+                'instance_principal': oci_config.pop('instance_principal', None),
+                'bucket_name': oci_config.pop('bucket_name', None),
+            }
 
         self.client = BackupClient(**client_kwargs)
         self.command_str = f'{kwargs.pop("module")}_{kwargs.pop("command")}'

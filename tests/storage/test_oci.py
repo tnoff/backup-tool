@@ -8,7 +8,7 @@ from oci.object_storage import ObjectStorageClient
 
 from backup_tool import utils
 from backup_tool.exception import ObjectStorageException
-from backup_tool.oci_client import OCIObjectStorageClient
+from backup_tool.storage.oci import OCIObjectStorageClient
 
 FAKE_CONFIG = 'faker_config'
 FAKE_SECTION = 'default'
@@ -70,21 +70,22 @@ def test_object_list(mocker):
         def __init__(self, *args, **kwargs):
             pass
 
-        def get_namespace(self):
+        # Not sure why but this one freaks out when you pass self in
+        def get_namespace():
             return MockResponse(200, FAKE_NAMESPACE)
 
         def list_objects(self, *args, **kwargs):
             return MockResponse(200, MockListData([MockObject(fake_name, 123, '0123456')]))
 
-    mocker.patch('backup_tool.oci_client.from_file',
+    mocker.patch('backup_tool.storage.oci.from_file',
                  return_value='')
-    mocker.patch('backup_tool.oci_client.ObjectStorageClient',
+    mocker.patch('backup_tool.storage.oci.ObjectStorageClient',
                  return_value=MockOCI)
-    mocker.patch('backup_tool.oci_client.list_call_get_all_results',
+    mocker.patch('backup_tool.storage.oci.list_call_get_all_results',
                  side_effect=list_all_mock)
-    mocker.patch('backup_tool.oci_client.to_dict',
+    mocker.patch('backup_tool.storage.oci.to_dict',
                  side_effect=to_dict_mock)
-    client = OCIObjectStorageClient()
+    client = OCIObjectStorageClient(config_file=FAKE_CONFIG, config_section=FAKE_SECTION, oci_bucket_name=FAKE_BUCKET)
     # Make sure to pass page limit of 1
     objects = client.object_list()
     assert len(objects) == 1
@@ -109,16 +110,19 @@ def test_object_get(mocker):
                     def __init__(self, *args, **kwargs):
                         pass
 
+                    def get_namespace():
+                        return MockResponse(200, FAKE_NAMESPACE)
+
                     def get_object(self, *args, **kwargs):
                         return MockResponse(200, MockRawRequest())
 
-                mocker.patch('backup_tool.oci_client.from_file',
+                mocker.patch('backup_tool.storage.oci.from_file',
                             return_value='')
-                mocker.patch('backup_tool.oci_client.ObjectStorageClient',
+                mocker.patch('backup_tool.storage.oci.ObjectStorageClient',
                             return_value=MockOCI)
-                mocker.patch('backup_tool.oci_client.to_dict',
+                mocker.patch('backup_tool.storage.oci.to_dict',
                             side_effect=to_dict_mock)
-                client = OCIObjectStorageClient()
+                client = OCIObjectStorageClient(config_file=FAKE_CONFIG, config_section=FAKE_SECTION, oci_bucket_name=FAKE_BUCKET)
                 # Make sure to pass page limit of 1
                 with utils.temp_file(tmp_dir) as temp_file:
                     objects = client.object_get('some-object-name', temp_file)
@@ -130,19 +134,19 @@ def test_object_get_invalid_status(mocker):
         def __init__(self, *args, **kwargs):
             pass
 
-        def get_namespace(self):
+        def get_namespace():
             return MockResponse(200, FAKE_NAMESPACE)
 
         def get_object(self, *args, **kwargs):
             return MockResponse(400, None)
 
-    mocker.patch('backup_tool.oci_client.from_file',
+    mocker.patch('backup_tool.storage.oci.from_file',
                  return_value='')
-    mocker.patch('backup_tool.oci_client.ObjectStorageClient',
+    mocker.patch('backup_tool.storage.oci.ObjectStorageClient',
                  return_value=MockOCI)
-    mocker.patch('backup_tool.oci_client.to_dict',
+    mocker.patch('backup_tool.storage.oci.to_dict',
                  side_effect=to_dict_mock)
-    client = OCIObjectStorageClient()
+    client = OCIObjectStorageClient(config_file=FAKE_CONFIG, config_section=FAKE_SECTION, oci_bucket_name=FAKE_BUCKET)
     # Make sure to pass page limit of 1
     with TemporaryDirectory() as tmp_dir:
         with utils.temp_file(tmp_dir) as temp_file:
@@ -155,7 +159,7 @@ def test_object_get_restore(mocker):
         def __init__(self, *args, **kwargs):
             pass
 
-        def get_namespace(self):
+        def get_namespace():
             return MockResponse(200, FAKE_NAMESPACE)
 
         def get_object(self, *args, **kwargs):
@@ -164,13 +168,13 @@ def test_object_get_restore(mocker):
         def restore_objects(self, *args, **kwargs):
             return MockResponse(202, None)
 
-    mocker.patch('backup_tool.oci_client.from_file',
+    mocker.patch('backup_tool.storage.oci.from_file',
                  return_value='')
-    mocker.patch('backup_tool.oci_client.ObjectStorageClient',
+    mocker.patch('backup_tool.storage.oci.ObjectStorageClient',
                  return_value=MockOCI)
-    mocker.patch('backup_tool.oci_client.to_dict',
+    mocker.patch('backup_tool.storage.oci.to_dict',
                  side_effect=to_dict_mock)
-    client = OCIObjectStorageClient()
+    client = OCIObjectStorageClient(config_file=FAKE_CONFIG, config_section=FAKE_SECTION, oci_bucket_name=FAKE_BUCKET)
     # Make sure to pass page limit of 1
     with TemporaryDirectory() as tmp_dir:
         with utils.temp_file(tmp_dir) as temp_file:
@@ -181,7 +185,7 @@ def test_object_get_restore_invalid_status(mocker):
         def __init__(self, *args, **kwargs):
             pass
 
-        def get_namespace(self):
+        def get_namespace():
             return MockResponse(200, FAKE_NAMESPACE)
 
         def get_object(self, *args, **kwargs):
@@ -190,13 +194,13 @@ def test_object_get_restore_invalid_status(mocker):
         def restore_objects(self, *args, **kwargs):
             return MockResponse(400, None)
 
-    mocker.patch('backup_tool.oci_client.from_file',
+    mocker.patch('backup_tool.storage.oci.from_file',
                  return_value='')
-    mocker.patch('backup_tool.oci_client.ObjectStorageClient',
+    mocker.patch('backup_tool.storage.oci.ObjectStorageClient',
                  return_value=MockOCI)
-    mocker.patch('backup_tool.oci_client.to_dict',
+    mocker.patch('backup_tool.storage.oci.to_dict',
                  side_effect=to_dict_mock)
-    client = OCIObjectStorageClient()
+    client = OCIObjectStorageClient(config_file=FAKE_CONFIG, config_section=FAKE_SECTION, oci_bucket_name=FAKE_BUCKET)
     # Make sure to pass page limit of 1
     with TemporaryDirectory() as tmp_dir:
         with utils.temp_file(tmp_dir) as temp_file:
@@ -213,19 +217,19 @@ def test_object_delete(mocker):
         def __init__(self, *args, **kwargs):
             pass
 
-        def get_namespace(self):
+        def get_namespace():
             return MockResponse(200, FAKE_NAMESPACE)
 
         def delete_object(self, *args, **kwargs):
             return MockResponse(204, None)
 
-    mocker.patch('backup_tool.oci_client.from_file',
+    mocker.patch('backup_tool.storage.oci.from_file',
                  return_value='')
-    mocker.patch('backup_tool.oci_client.ObjectStorageClient',
+    mocker.patch('backup_tool.storage.oci.ObjectStorageClient',
                  return_value=MockOCI)
-    mocker.patch('backup_tool.oci_client.to_dict',
+    mocker.patch('backup_tool.storage.oci.to_dict',
                  side_effect=to_dict_mock)
-    client = OCIObjectStorageClient()
+    client = OCIObjectStorageClient(config_file=FAKE_CONFIG, config_section=FAKE_SECTION, oci_bucket_name=FAKE_BUCKET)
     client.object_delete('some-object-name')
 
 def test_object_delete_invalid_status(mocker):
@@ -233,19 +237,19 @@ def test_object_delete_invalid_status(mocker):
         def __init__(self, *args, **kwargs):
             pass
 
-        def get_namespace(self):
+        def get_namespace():
             return MockResponse(200, FAKE_NAMESPACE)
 
         def delete_object(self, *args, **kwargs):
             return MockResponse(400, f'Cannot delete object, raven never delivered message')
 
-    mocker.patch('backup_tool.oci_client.from_file',
+    mocker.patch('backup_tool.storage.oci.from_file',
                  return_value='')
-    mocker.patch('backup_tool.oci_client.ObjectStorageClient',
+    mocker.patch('backup_tool.storage.oci.ObjectStorageClient',
                  return_value=MockOCI)
-    mocker.patch('backup_tool.oci_client.to_dict',
+    mocker.patch('backup_tool.storage.oci.to_dict',
                  side_effect=to_dict_mock)
-    client = OCIObjectStorageClient()
+    client = OCIObjectStorageClient(config_file=FAKE_CONFIG, config_section=FAKE_SECTION, oci_bucket_name=FAKE_BUCKET)
     with pytest.raises(ObjectStorageException) as error:
         client.object_delete('some-object-name')
     assert str(error.value) == 'Error deleting object, Reponse code 400'
@@ -259,7 +263,7 @@ def test_object_put(mocker):
         def __init__(self, *args, **kwargs):
             pass
 
-        def get_namespace(self):
+        def get_namespace():
             return MockResponse(200, FAKE_NAMESPACE)
 
     class MockUploadManager():
@@ -268,15 +272,15 @@ def test_object_put(mocker):
         def upload_file(self, *args, **kwargs):
             return MockResponse(200, None)
 
-    mocker.patch('backup_tool.oci_client.from_file',
+    mocker.patch('backup_tool.storage.oci.from_file',
                  return_value='')
-    mocker.patch('backup_tool.oci_client.ObjectStorageClient',
+    mocker.patch('backup_tool.storage.oci.ObjectStorageClient',
                  return_value=MockOCI)
-    mocker.patch('backup_tool.oci_client.UploadManager',
+    mocker.patch('backup_tool.storage.oci.UploadManager',
                  return_value=MockUploadManager)
-    mocker.patch('backup_tool.oci_client.to_dict',
+    mocker.patch('backup_tool.storage.oci.to_dict',
                  side_effect=to_dict_mock)
-    client = OCIObjectStorageClient()
+    client = OCIObjectStorageClient(config_file=FAKE_CONFIG, config_section=FAKE_SECTION, oci_bucket_name=FAKE_BUCKET)
     fake_data = utils.random_string()
     with TemporaryDirectory() as tmp_dir:
         with utils.temp_file(tmp_dir) as temp_file:
@@ -289,7 +293,7 @@ def test_object_put_resume(mocker):
         def __init__(self, *args, **kwargs):
             pass
 
-        def get_namespace(self):
+        def get_namespace():
             return MockResponse(200, FAKE_NAMESPACE)
 
         def list_multipart_uploads(self, *args, **kwargs):
@@ -300,7 +304,7 @@ def test_object_put_resume(mocker):
         def __init__(self, *args, **kwargs):
             pass
 
-        def get_namespace(self):
+        def get_namespace():
             return MockResponse(200, FAKE_NAMESPACE)
 
         def upload_file(self, *args, **kwargs):
@@ -309,17 +313,17 @@ def test_object_put_resume(mocker):
         def resume_upload_file(self, *args, **kwargs):
             return MockResponse(200, None)
 
-    mocker.patch('backup_tool.oci_client.from_file',
+    mocker.patch('backup_tool.storage.oci.from_file',
                  return_value='')
-    mocker.patch('backup_tool.oci_client.ObjectStorageClient',
+    mocker.patch('backup_tool.storage.oci.ObjectStorageClient',
                  return_value=MockOCI)
-    mocker.patch('backup_tool.oci_client.UploadManager',
+    mocker.patch('backup_tool.storage.oci.UploadManager',
                  return_value=MockUploadManager)
-    mocker.patch('backup_tool.oci_client.list_call_get_all_results',
+    mocker.patch('backup_tool.storage.oci.list_call_get_all_results',
                  side_effect=list_all_mock)
-    mocker.patch('backup_tool.oci_client.to_dict',
+    mocker.patch('backup_tool.storage.oci.to_dict',
                  side_effect=to_dict_mock)
-    client = OCIObjectStorageClient()
+    client = OCIObjectStorageClient(config_file=FAKE_CONFIG, config_section=FAKE_SECTION, oci_bucket_name=FAKE_BUCKET)
     fake_data = utils.random_string()
     with TemporaryDirectory() as tmp_dir:
         with utils.temp_file(tmp_dir) as temp_file:
@@ -332,7 +336,7 @@ def test_object_put_invalid_status(mocker):
         def __init__(self, *args, **kwargs):
             pass
 
-        def get_namespace(self):
+        def get_namespace():
             return MockResponse(200, FAKE_NAMESPACE)
 
     class MockUploadManager():
@@ -341,15 +345,15 @@ def test_object_put_invalid_status(mocker):
         def upload_file(self, *args, **kwargs):
             return MockResponse(400, f'This aint Valyrian steel')
 
-    mocker.patch('backup_tool.oci_client.from_file',
+    mocker.patch('backup_tool.storage.oci.from_file',
                  return_value='')
-    mocker.patch('backup_tool.oci_client.ObjectStorageClient',
+    mocker.patch('backup_tool.storage.oci.ObjectStorageClient',
                  return_value=MockOCI)
-    mocker.patch('backup_tool.oci_client.UploadManager',
+    mocker.patch('backup_tool.storage.oci.UploadManager',
                  return_value=MockUploadManager)
-    mocker.patch('backup_tool.oci_client.to_dict',
+    mocker.patch('backup_tool.storage.oci.to_dict',
                  side_effect=to_dict_mock)
-    client = OCIObjectStorageClient()
+    client = OCIObjectStorageClient(config_file=FAKE_CONFIG, config_section=FAKE_SECTION, oci_bucket_name=FAKE_BUCKET)
     fake_data = utils.random_string()
     with TemporaryDirectory() as tmp_dir:
         with utils.temp_file(tmp_dir) as temp_file:

@@ -17,7 +17,7 @@ class OCIObjectStorageClient():
     '''
     Object Storage Client
     '''
-    def __init__(self, logger=None, instance_principal=False, **kwargs):
+    def __init__(self, **kwargs):
         '''
         Create ObjectStorageClient for OCI
 
@@ -29,20 +29,20 @@ class OCIObjectStorageClient():
         '''
         config_file = kwargs.pop('config_file', None)
         config_section = kwargs.pop('config_section', None)
+        instance_principal = kwargs.pop('instance_principal', False)
+        self.bucket_name = kwargs.pop('bucket_name', None)
+        self.logger = kwargs.pop('logger', setup_logger('oci_client', 10))
+
+        self.object_storage_client = None
         if not instance_principal:
             config = from_file(config_file, config_section)
             self.object_storage_client = ObjectStorageClient(config, retry_strategy=DEFAULT_RETRY_STRATEGY)
         else:
             signer = InstancePrincipalsSecurityTokenSigner()
             self.object_storage_client = ObjectStorageClient(config={}, signer=signer, retry_strategy=DEFAULT_RETRY_STRATEGY)
+
         self.upload_manager = UploadManager(self.object_storage_client)
         self.namespace_name = self.object_storage_client.get_namespace().data
-        self.bucket_name = kwargs.pop('oci_bucket_name', None)
-
-        if logger is None:
-            self.logger = setup_logger("oci_client", 10)
-        else:
-            self.logger = logger
 
     def object_list(self):
         '''
