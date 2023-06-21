@@ -1,6 +1,5 @@
 import json
 import os
-import re
 import sys
 from tempfile import TemporaryDirectory
 
@@ -11,8 +10,6 @@ from yaml.parser import ParserError
 from backup_tool.exception import CLIException
 from backup_tool.client import BackupClient
 from backup_tool.cli.common import CommonArgparse
-from backup_tool.database import BackupEntryLocalFile
-from backup_tool import utils
 
 HOME_PATH = Path(os.path.expanduser('~'))
 DEFAULT_SETTINGS_FILE = HOME_PATH / '.backup-tool' / 'config'
@@ -72,8 +69,6 @@ class ClientCLI():
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
-        if self.cache_file and self.cache_json:
-            self.cache_file.write_text(json.dumps(self.cache_json))
         temp_dir_path = Path(self.temporary_directory.name)
         for child in temp_dir_path.glob('*'):
             if child.is_file():
@@ -92,110 +87,6 @@ class ClientCLI():
             value = command(**self.additional_kwargs)
         if value is not None:
             print(json.dumps(value, indent=4))
-
-    def __consume_backup_file(self, local_file_path, overwrite):
-        self.client.logger.debug(f'Backup up file {str(local_file_path)}')
-        local_file_md5 = utils.md5(local_file_path)
-        self.client.logger.debug(f'Local file "{str(local_file_path)}" has md5 {local_file_md5}')
-        should_upload_file, local_backup_file = self.client._file_backup_ensure_database_entry(local_file_path, #pylint:disable=protected-access
-                                                                                                local_file_md5,
-                                                                                                overwrite)
-        if not should_upload_file:
-            self.cache_json['backup']['processed'].append(str(local_file_path))
-            return None
-        encryption_data = self.client._file_backup_encrypt(local_file_path, local_file_md5) #pylint:disable=protected-access
-        encryption_data_key = encryption_data.get('local_file')
-        encryption_data['local_backup_file_id'] = local_backup_file.id
-        self.cache_json['backup']['pending_upload'][encryption_data_key] = encryption_data
-        return encryption_data
-
-    def __consume_upload_files(self, encryption_data):
-        self.client.logger.debug(f'Uploading crypto of file {str(encryption_data["local_file"])}')
-        local_backup_file = self.client.db_session.query(BackupEntryLocalFile).get(encryption_data['local_backup_file_id'])
-        resume_upload = False
-        try:
-            object_path = self.cache_json['backup']['pending_upload'][encryption_data['local_file']]['object_path']
-            resume_upload = True
-        except KeyError:
-            object_path = self.client._generate_uuid() #pylint:disable=protected-access
-            self.cache_json['backup']['pending_upload'][encryption_data['local_file']]['object_path'] = object_path
-        self.client._file_backup_upload(encryption_data['encrypted_file'], #pylint:disable=protected-access
-                                        encryption_data['encrypted_file_md5'],
-                                        encryption_data['local_file_md5'],
-                                        local_backup_file,
-                                        object_path=object_path,
-                                        resume_upload=resume_upload)
-        self.cache_json['backup']['processed'].append(str(encryption_data['local_file']))
-        del self.cache_json['backup']['pending_upload'][encryption_data['local_file']]
-        Path(encryption_data['encrypted_file']).unlink()
-
-    def directory_backup(self, dir_paths, overwrite=False, #pylint:disable=too-many-locals
-                        skip_files=None, cache_file=None):
-        '''
-        Backup all files in directory
-
-        dir_paths           :       Directories to backup
-        overwrite           :       Upload new file is md5 is changed
-        skip_files          :       List of regexes to ignore for backup
-        cache_file          :       Cache File Location, will use default in work directory otherwise
-        '''
-        # Read cached information if its there
-        self.cache_file = cache_file or self.client.work_directory / 'cache_file.json'
-        if self.cache_file.exists():
-            self.cache_json = json.loads(self.cache_file.read_text())
-
-        directory_list = []
-        for dir_path in dir_paths:
-            directory_path = Path(dir_path).resolve()
-            if not directory_path.exists():
-                self.client.logger.error(f'Unable to find directory {str(directory_path)}')
-                return
-            directory_list.append(directory_path)
-
-        # Make sure skip files is a string type
-        if skip_files is None:
-            skip_files = []
-        elif isinstance(skip_files, str):
-            skip_files = [skip_files]
-
-        self.client.logger.debug('Generating backup file producer queues')
-        # Keep a list here, since cache json will be effected during upload
-        pending_encryption_dicts = []
-        for local_file, encryption_data in self.cache_json['backup']['pending_upload'].items():
-            encryption_data['local_file'] = local_file
-            pending_encryption_dicts.append(encryption_data)
-
-        for encryption_data in pending_encryption_dicts:
-            self.__consume_upload_files(encryption_data)
-
-        pending_backup_files = []
-        for directory_path in directory_list:
-            self.client.logger.info(f'Generating file list from directory "{str(directory_path)}"')
-            for file_name in directory_path.glob('**/*'):
-                file_path = file_name.resolve()
-                # Skip if matches any continue
-                skip = False
-                for skip_check in skip_files:
-                    if re.match(skip_check, str(file_path)):
-                        self.client.logger.warning(f'Ignoring file "{str(file_path)}" since matches skip check "{skip_check}"')
-                        skip = True
-                        break
-                if skip:
-                    continue
-
-                if str(file_path) in self.cache_json['backup']['processed']:
-                    self.client.logger.debug(f'Ignoring file "{str(file_path)}" as it is in cache or pending upload')
-                    continue
-                if file_name.is_dir():
-                    continue
-                self.client.logger.debug(f'Adding file to backup queue "{str(file_path)}"')
-                pending_backup_files.append(file_path)
-
-        for local_file_path in pending_backup_files:
-            encryption_data = self.__consume_backup_file(local_file_path, overwrite)
-            if encryption_data:
-                self.__consume_upload_files(encryption_data)
-        self.client.logger.debug('Generating upload file consumer queues')
 
 
 def parse_args(args): #pylint:disable=too-many-locals,too-many-statements
