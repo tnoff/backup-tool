@@ -8,7 +8,7 @@ setuptools.setup(
     install_requires=[
         'oci == 2.104.2',
         'pathlib == 1.0.1',
-        'pycryptodome == 3.18',
+        'pycryptodome == 3.19.1',
         'PyYAML == 6.0',
         'SQLAlchemy == 2.0.16',
     ],
