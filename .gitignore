@@ -6,3 +6,4 @@ backup_tool.egg-info/
 .tox
 .coverage
 htmlcov/*
+build/

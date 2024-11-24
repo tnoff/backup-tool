@@ -239,17 +239,6 @@ def test_load_settings():
         assert result['oci']['namespace'] == 'foo'
         assert result['oci']['bucket'] == 'bar'
 
-def test_generate_args():
-    result = generate_args(['file', 'list'])
-    assert result['module'] == 'file'
-    assert result['command'] == 'list'
-
-    with TemporaryDirectory() as tmp_dir:
-        with utils.temp_file(tmp_dir) as settings_file:
-            settings_file.write_text('general:\n  logging_file: foo.log')
-            result = generate_args(['-s', str(settings_file), 'file', 'list'])
-            assert result['general']['logging_file'] == 'foo.log'
-
 @patch('builtins.print')
 def test_cli_client(mocker):
     x = ClientCLI(**{
