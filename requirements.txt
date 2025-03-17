@@ -1,5 +1,5 @@
 oci==2.147.0
 pathlib==1.0.1
 pycryptodome==3.22.0
-SQLAlchemy==2.0.38
+SQLAlchemy==2.0.39
 PyYAML==6.0.2
