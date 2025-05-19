@@ -1,4 +1,4 @@
-oci==2.151.0
+oci==2.152.0
 pathlib==1.0.1
 pycryptodome==3.22.0
 SQLAlchemy==2.0.40
