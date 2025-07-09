@@ -113,7 +113,7 @@ general:
 
 oci:
   config_file: /home/user/.oci/config
-  config_stage: DEFAULT
+  config_section: DEFAULT
   namespace: my-custom-namespace
   bucket: backup
 ```
