@@ -1,13 +1,13 @@
 # Backup Tool
 
 
-Encrypt and backup local files to Oracle Cloud Intrastructure (OCI) Object Storage.
+Encrypt and backup local files to Oracle Cloud Infrastructure (OCI) Object Storage.
 
 ## Overview
 
 For each file specified, the backup tool will first calculate the md5 of the file, encrypt that file while also saving the md5 of the encrypted file, and then upload the encrypted file to OCI Object Storage.
 
-The tool can also restore these files from OCI Object storage, by first downloaded the encrypted file and then decrypting it.
+The tool can also restore these files from OCI Object storage, by first downloading the encrypted file and then decrypting it.
 
 ### Encryption Method
 
@@ -17,9 +17,9 @@ The tool uses AES encryption in CBC mode. Files are encrypted using a random sal
 ### MD5 sums
 
 
-MD5 sums are calculated throughout the process to ensure data integrity. The md5 sum of each local file path is saved in the database, to ensure the file is not backed up mutliple times, as well as to ensure the tool can recognize the file has been modified. The `--overwrite` flag can be used to ensure that updates to local files are backed up.
+MD5 sums are calculated throughout the process to ensure data integrity. The md5 sum of each local file path is saved in the database, to ensure the file is not backed up multiple times, as well as to ensure the tool can recognize the file has been modified. The `--overwrite` flag can be used to ensure that updates to local files are backed up.
 
-The md5 of the corresponding encrypted file is also cacluated and saved in the database. When encrypting a new local file, it will calculate the md5 sum and verify there are no existing uploads with the same md5, as to not have mutliple uploads of the same file.
+The md5 of the corresponding encrypted file is also calculated and saved in the database. When encrypting a new local file, it will calculate the md5 sum and verify there are no existing uploads with the same md5, as to not have multiple uploads of the same file.
 
 When uploading the file to object storage, the client passes in the md5 as a header to ensure the object storage client will error if the md5 of the uploaded file does not match the expected value.
 
@@ -75,7 +75,7 @@ key_file=~/.oci/oci_api_key.pem
 ### Setup Compartments and Buckets
 
 
-Generate compartent for backup data
+Generate compartment for backup data
 
 ```
 $ oci iam compartment create -c "${TENANCY_OCID}" --name "backup" --description "Backup data"
@@ -100,7 +100,7 @@ $ cat .backup-tool/crypto-key
 
 You can define common config options in a config file, by default the client will expect the config file in `~/.backup-tool/config`.
 
-All options in the config file can be overriden by the cli.
+All options in the config file can be overridden by the cli.
 
 The following is an example config file:
 
@@ -110,6 +110,7 @@ general:
   logging_file: /home/user/.backup-tool/backup-tool.log
   crypto_key_file: /home/user/.backup-tool/crypto-key
   relative_path: /home/user
+  work_directory: /home/user/.backup-tool/work
 
 oci:
   config_file: /home/user/.oci/config
@@ -140,14 +141,27 @@ For example, if a relative path `/home/user` is used, and a file `/home/user/foo
 Then, when the file is restored, the path will joined with the relative path, to make `/home/user/foo/bar` again.
 
 
+### Symlink Handling
+
+When backing up directories, the tool follows symlinks to their resolved paths. However, symlinks are skipped to avoid backing up symlink files themselves. If you need to back up the target of a symlink, back up the target directory directly.
+
+
+### Work Directory
+
+The work directory is used for temporary files during encryption/decryption operations and for caching backup state. Configure it in the config file under `general.work_directory`. If not specified, a temporary directory is created and cleaned up after each run.
 
 ### Caching
 
-When using the cli, supply a "work directory" and the client will track:
-- files already encrypted
-- files encrypted and uploaded
+For directory backups, you can use the `--cache-file` option to persist backup state across runs. The cache tracks:
+- Files already encrypted and pending upload
+- Files successfully processed
 
-It will also track uploads that can be resumed.
+This allows resuming interrupted directory backups. If `--cache-file` is not specified, a cache file will be created in the work directory but will be lost when the work directory is cleaned up.
+
+Example:
+```
+$ backup-tool directory backup --dir-paths /path/to/dir --cache-file ~/.backup-tool/cache.json
+```
 
 
 ### Object Storage Options
