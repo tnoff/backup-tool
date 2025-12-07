@@ -136,7 +136,7 @@ class ClientCLI():
         cache_file          :       Cache File Location, will use default in work directory otherwise
         '''
         # Read cached information if its there
-        self.cache_file = cache_file or self.client.work_directory / 'cache_file.json'
+        self.cache_file = Path(cache_file).expanduser() if cache_file else self.client.work_directory / 'cache_file.json'
         if self.cache_file.exists():
             self.cache_json = json.loads(self.cache_file.read_text())
 
