@@ -107,7 +107,7 @@ class ClientCLI():
 
     def __consume_upload_files(self, encryption_data):
         self.client.logger.debug(f'Uploading crypto of file {str(encryption_data["local_file"])}')
-        local_backup_file = self.client.db_session.query(BackupEntryLocalFile).get(encryption_data['local_backup_file_id'])
+        local_backup_file = self.client.db_session.get(BackupEntryLocalFile, encryption_data['local_backup_file_id'])
         resume_upload = False
         try:
             object_path = self.cache_json['backup']['pending_upload'][encryption_data['local_file']]['object_path']
