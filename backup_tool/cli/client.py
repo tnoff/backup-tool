@@ -107,7 +107,7 @@ class ClientCLI():
 
     def __consume_upload_files(self, encryption_data):
         self.client.logger.debug(f'Uploading crypto of file {str(encryption_data["local_file"])}')
-        local_backup_file = self.client.db_session.query(BackupEntryLocalFile).get(encryption_data['local_backup_file_id'])
+        local_backup_file = self.client.db_session.get(BackupEntryLocalFile, encryption_data['local_backup_file_id'])
         resume_upload = False
         try:
             object_path = self.cache_json['backup']['pending_upload'][encryption_data['local_file']]['object_path']
@@ -136,7 +136,7 @@ class ClientCLI():
         cache_file          :       Cache File Location, will use default in work directory otherwise
         '''
         # Read cached information if its there
-        self.cache_file = cache_file or self.client.work_directory / 'cache_file.json'
+        self.cache_file = Path(cache_file).expanduser() if cache_file else self.client.work_directory / 'cache_file.json'
         if self.cache_file.exists():
             self.cache_json = json.loads(self.cache_file.read_text())
 
@@ -184,10 +184,14 @@ class ClientCLI():
                     continue
                 if file_name.is_dir():
                     continue
+                if file_name.is_symlink():
+                    self.client.logger.warning(f'Ignoring symlink file {str(file_name)}')
+                    continue
                 self.client.logger.debug(f'Adding file to backup queue "{str(file_path)}"')
                 pending_backup_files.append(file_path)
 
         for local_file_path in pending_backup_files:
+            # Check if file is within relative_path before processing
             encryption_data = self.__consume_backup_file(local_file_path, overwrite)
             if encryption_data:
                 self.__consume_upload_files(encryption_data)

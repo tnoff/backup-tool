@@ -95,7 +95,7 @@ class BackupClient():
         '''
         self.logger.info(f'Restoring local file: {local_file_id}')
 
-        local_file = self.db_session.query(BackupEntryLocalFile).get(local_file_id)
+        local_file = self.db_session.get(BackupEntryLocalFile, local_file_id)
         if not local_file:
             self.logger.error(f'Unable to find local file: {local_file_id}')
             return False
@@ -104,7 +104,7 @@ class BackupClient():
             self.logger.error(f'No backup entry for local file: {local_file_id}')
             return False
 
-        backup_entry = self.db_session.query(BackupEntry).get(local_file.backup_entry_id)
+        backup_entry = self.db_session.get(BackupEntry, local_file.backup_entry_id)
 
         if not backup_entry:
             self.logger.error(f'Expecting backup entry {local_file.backup_entry_id} does not exist')
@@ -199,7 +199,7 @@ class BackupClient():
             return True
 
         # Check if backup entry matches local file
-        backup_entry = self.db_session.query(BackupEntry).get(local_backup_file.backup_entry_id)
+        backup_entry = self.db_session.get(BackupEntry, local_backup_file.backup_entry_id)
         if backup_entry.original_md5_checksum == local_file_md5:
             self.logger.debug(f'Local backup file {local_backup_file.id} still has same md5 as {backup_entry.id}')
             return False
