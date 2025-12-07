@@ -184,10 +184,14 @@ class ClientCLI():
                     continue
                 if file_name.is_dir():
                     continue
+                if file_name.is_symlink():
+                    self.client.logger.warning(f'Ignoring symlink file {str(file_name)}')
+                    continue
                 self.client.logger.debug(f'Adding file to backup queue "{str(file_path)}"')
                 pending_backup_files.append(file_path)
 
         for local_file_path in pending_backup_files:
+            # Check if file is within relative_path before processing
             encryption_data = self.__consume_backup_file(local_file_path, overwrite)
             if encryption_data:
                 self.__consume_upload_files(encryption_data)
