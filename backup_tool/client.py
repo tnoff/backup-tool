@@ -3,6 +3,8 @@ import uuid
 from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from alembic.config import Config
+from alembic import command
 
 from backup_tool import crypto
 from backup_tool.exception import BackupToolClientException
@@ -14,6 +16,26 @@ class BackupClient():
     '''
     Backup Client
     '''
+
+    def _run_migrations(self, database_url):
+        '''
+        Run Alembic migrations to ensure database schema is up to date
+
+        database_url    :   SQLAlchemy database URL
+        '''
+        # Get the directory where this file is located to find alembic.ini
+        current_dir = Path(__file__).parent.parent
+        alembic_ini_path = current_dir / 'alembic.ini'
+
+        # Configure Alembic
+        alembic_cfg = Config(str(alembic_ini_path))
+        alembic_cfg.set_main_option('sqlalchemy.url', database_url)
+
+        # Run migrations to latest revision
+        self.logger.debug(f'Running Alembic migrations for database: {database_url}')
+        command.upgrade(alembic_cfg, 'head')
+        self.logger.debug('Alembic migrations completed successfully')
+
     def __init__(self, database_file, crypto_key, oci_config_file, oci_config_section, oci_namespace, oci_bucket,
                  work_directory, logging_file=None, relative_path=None, oci_instance_principal=False):
         '''
@@ -46,13 +68,21 @@ class BackupClient():
         self.logger = utils.setup_logger('backup_client', 10, logging_file=logging_file)
 
         if database_file is None:
-            engine = create_engine('sqlite:///')
+            database_url = 'sqlite:///'
             self.logger.debug('Initializing database with no file')
+            # For in-memory databases, use create_all instead of migrations
+            # since each connection creates a new database
+            engine = create_engine(database_url)
+            BASE.metadata.create_all(engine)
         else:
-            engine = create_engine(f'sqlite:///{database_file}')
+            database_url = f'sqlite:///{database_file}'
             self.logger.debug(f'Initializing database with file: "{database_file}"')
+            # Run migrations to ensure schema is up to date
+            self._run_migrations(database_url)
+            # Create engine after migrations
+            engine = create_engine(database_url)
 
-        BASE.metadata.create_all(engine)
+        # Bind metadata and create session
         BASE.metadata.bind = engine
         self.db_session = sessionmaker(bind=engine)()
 

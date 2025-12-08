@@ -3,3 +3,4 @@ pathlib==1.0.1
 pycryptodome==3.23.0
 SQLAlchemy==2.0.44
 PyYAML==6.0.3
+alembic==1.14.0
