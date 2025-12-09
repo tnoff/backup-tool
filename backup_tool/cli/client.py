@@ -89,14 +89,35 @@ class ClientCLI():
         if value is not None:
             print(json.dumps(value, indent=4))
 
-    def __consume_backup_file(self, local_file_path, overwrite):
+    def __consume_backup_file(self, local_file_path, overwrite, force_checksum=False):
         self.client.logger.debug(f'Backup up file {str(local_file_path)}')
+
+        # Get relative path for database
+        relative_file_path = local_file_path
+        if self.client.relative_path:
+            relative_file_path = local_file_path.relative_to(self.client.relative_path)
+
+        # Get database entry to check metadata
+        local_backup_file = self.client.db_session.query(BackupEntryLocalFile).\
+            filter(BackupEntryLocalFile.local_file_path == str(relative_file_path)).first()
+
+        # Check metadata first (unless force_checksum)
+        if local_backup_file and not force_checksum:
+            if not self.client._check_metadata_changed(local_file_path, local_backup_file): #pylint:disable=protected-access
+                # Metadata unchanged - file likely hasn't changed
+                if local_backup_file.backup_entry_id:
+                    self.client.logger.debug(f'File metadata unchanged, skipping backup for "{str(local_file_path)}"')
+                    self.cache_json['backup']['processed'].append(str(local_file_path))
+                    return None
+
         local_file_md5 = utils.md5(local_file_path)
         self.client.logger.debug(f'Local file "{str(local_file_path)}" has md5 {local_file_md5}')
         should_upload_file, local_backup_file = self.client._file_backup_ensure_database_entry(local_file_path, #pylint:disable=protected-access
                                                                                                 local_file_md5,
                                                                                                 overwrite)
         if not should_upload_file:
+            # Update metadata cache even if not uploading (md5 matched but metadata changed)
+            self.client._update_metadata_cache(local_file_path, local_backup_file) #pylint:disable=protected-access
             self.cache_json['backup']['processed'].append(str(local_file_path))
             return None
         encryption_data = self.client._file_backup_encrypt(local_file_path, local_file_md5) #pylint:disable=protected-access
@@ -121,19 +142,22 @@ class ClientCLI():
                                         local_backup_file,
                                         object_path=object_path,
                                         resume_upload=resume_upload)
+        # Update metadata cache after successful upload
+        self.client._update_metadata_cache(Path(encryption_data['local_file']), local_backup_file) #pylint:disable=protected-access
         self.cache_json['backup']['processed'].append(str(encryption_data['local_file']))
         del self.cache_json['backup']['pending_upload'][encryption_data['local_file']]
         Path(encryption_data['encrypted_file']).unlink()
 
     def directory_backup(self, dir_paths, overwrite=False, #pylint:disable=too-many-locals
-                        skip_files=None, cache_file=None):
+                        skip_files=None, cache_file=None, force_checksum=False):
         '''
         Backup all files in directory
 
         dir_paths           :       Directories to backup
-        overwrite           :       Upload new file is md5 is changed
+        overwrite           :       Upload new file if md5 has changed
         skip_files          :       List of regexes to ignore for backup
         cache_file          :       Cache File Location, will use default in work directory otherwise
+        force_checksum      :       Force MD5 calculation even if metadata unchanged
         '''
         # Read cached information if its there
         self.cache_file = Path(cache_file).expanduser() if cache_file else self.client.work_directory / 'cache_file.json'
@@ -192,7 +216,7 @@ class ClientCLI():
 
         for local_file_path in pending_backup_files:
             # Check if file is within relative_path before processing
-            encryption_data = self.__consume_backup_file(local_file_path, overwrite)
+            encryption_data = self.__consume_backup_file(local_file_path, overwrite, force_checksum)
             if encryption_data:
                 self.__consume_upload_files(encryption_data)
         self.client.logger.debug('Generating upload file consumer queues')
@@ -230,6 +254,8 @@ def parse_args(args): #pylint:disable=too-many-locals,too-many-statements
     file_backup = file_sub_parser.add_parser('backup', help='Backup file')
     file_backup.add_argument('local_file', help='Local file path')
     file_backup.add_argument('--overwrite', '-o', action='store_true', help='Overwrite copy in database')
+    file_backup.add_argument('--force-checksum', '-fc', action='store_true',
+                            help='Force full MD5 checksum calculation even if file metadata (mtime/size) unchanged')
 
     # File restore
     file_restore = file_sub_parser.add_parser('restore', help='Restore from backup file')
@@ -271,6 +297,8 @@ def parse_args(args): #pylint:disable=too-many-locals,too-many-statements
     dir_backup.add_argument('--overwrite', '-o', action='store_true', help='Overwrite copy in database')
     dir_backup.add_argument('--skip-files', '-f', nargs='+', help='Skip files matching regexes')
     dir_backup.add_argument('--cache-file', '-cf', help='Cache file to use for directory backup')
+    dir_backup.add_argument('--force-checksum', '-fc', action='store_true',
+                           help='Force full MD5 checksum calculation even if file metadata (mtime/size) unchanged')
 
     # Final Steps
     parsed_args = vars(parser.parse_args(args))

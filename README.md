@@ -29,6 +29,33 @@ When uploading the file to object storage, the client passes in the md5 as a hea
 
 The database is a simple sqlite file stored locally.
 
+#### Database Migrations
+
+The tool uses Alembic for database schema migrations. When the BackupClient is initialized with a database file, migrations are automatically run to ensure the schema is up to date.
+
+For new installations, the initial schema is created automatically. For existing databases, any pending migrations are applied seamlessly on startup.
+
+To manually run migrations:
+
+```bash
+# Upgrade to latest schema version
+$ alembic upgrade head
+
+# View migration history
+$ alembic history
+
+# Downgrade to previous version (if needed)
+$ alembic downgrade -1
+```
+
+To create a new migration after modifying database models:
+
+```bash
+$ alembic revision --autogenerate -m "Description of changes"
+```
+
+Note: In-memory databases (used for testing) bypass migrations and use direct table creation for performance.
+
 
 ## Install client
 
