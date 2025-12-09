@@ -207,5 +207,168 @@ def test_alembic_migrations(mocker):
             with engine.connect() as conn:
                 result = conn.execute(text('SELECT version_num FROM alembic_version'))
                 version = result.fetchone()[0]
-                # Should be the initial migration
-                assert version == 'ef9f78b6211b'
+                # Should be the latest migration (metadata caching)
+                assert version == 'ff8c0e19188c'
+
+def test_metadata_caching(mocker):
+    '''Test that metadata caching speeds up backups for unchanged files'''
+    mocker.patch('backup_tool.client.OCIObjectStorageClient',
+                 return_value=MockOSClient)
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir, suffix='.sql') as temp_db:
+            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
+
+            # Create a test file
+            with utils.temp_file(tmp_dir) as temp_file:
+                with open(temp_file, 'w') as writer:
+                    writer.write('test content')
+
+                # First backup - should calculate MD5 and cache metadata
+                result = client.file_backup(temp_file)
+                assert result == True
+
+                # Get the database entry
+                file_list = client.file_list()
+                assert len(file_list) == 1
+
+                # Verify metadata was cached
+                local_file = file_list[0]
+                assert local_file['cached_mtime'] is not None
+                assert local_file['cached_size'] is not None
+
+                # Second backup without changes - should skip due to metadata cache
+                result = client.file_backup(temp_file)
+                assert result == False  # File not backed up again
+
+                # Verify we still have only one backup entry
+                backup_list = client.backup_list()
+                assert len(backup_list) == 1
+
+def test_metadata_cache_detects_changes(mocker):
+    '''Test that metadata cache detects when files change'''
+    import time
+    mocker.patch('backup_tool.client.OCIObjectStorageClient',
+                 return_value=MockOSClient)
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir, suffix='.sql') as temp_db:
+            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
+
+            # Create a test file
+            with utils.temp_file(tmp_dir) as temp_file:
+                with open(temp_file, 'w') as writer:
+                    writer.write('original content')
+
+                # First backup
+                client.file_backup(temp_file)
+
+                # Wait a moment and modify the file
+                time.sleep(0.01)
+                with open(temp_file, 'w') as writer:
+                    writer.write('modified content with different size')
+
+                # Second backup with overwrite - should detect change via metadata
+                result = client.file_backup(temp_file, overwrite=True)
+                assert result == True  # File was backed up again
+
+                # Should have two backup entries now
+                backup_list = client.backup_list()
+                assert len(backup_list) == 2
+
+def test_force_checksum_flag(mocker):
+    '''Test that force_checksum flag forces MD5 calculation'''
+    mocker.patch('backup_tool.client.OCIObjectStorageClient',
+                 return_value=MockOSClient)
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir, suffix='.sql') as temp_db:
+            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
+
+            # Create a test file
+            with utils.temp_file(tmp_dir) as temp_file:
+                with open(temp_file, 'w') as writer:
+                    writer.write('test content')
+
+                # First backup
+                client.file_backup(temp_file)
+
+                # Second backup with force_checksum - should calculate MD5 even though metadata unchanged
+                # Should return False because MD5 matches
+                result = client.file_backup(temp_file, force_checksum=True)
+                assert result == False  # MD5 matched, so no new backup
+
+                # Should still have only one backup entry
+                backup_list = client.backup_list()
+                assert len(backup_list) == 1
+
+def test_metadata_cache_updates_after_backup(mocker):
+    '''Test that metadata cache is updated after successful backup'''
+    import time
+    mocker.patch('backup_tool.client.OCIObjectStorageClient',
+                 return_value=MockOSClient)
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir, suffix='.sql') as temp_db:
+            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
+
+            # Create a test file
+            with utils.temp_file(tmp_dir) as temp_file:
+                with open(temp_file, 'w') as writer:
+                    writer.write('original')
+
+                # First backup
+                client.file_backup(temp_file)
+                original_list = client.file_list()
+                original_mtime = original_list[0]['cached_mtime']
+
+                # Modify file
+                time.sleep(0.01)
+                with open(temp_file, 'w') as writer:
+                    writer.write('modified content')
+
+                # Backup with overwrite
+                client.file_backup(temp_file, overwrite=True)
+
+                # Check that cached metadata was updated
+                updated_list = client.file_list()
+                updated_mtime = updated_list[0]['cached_mtime']
+
+                # Metadata should have changed
+                assert updated_mtime != original_mtime
+
+def test_metadata_cache_populated_when_none(mocker):
+    '''Test that metadata cache is populated even when initially None'''
+    from backup_tool.database import BackupEntryLocalFile
+    mocker.patch('backup_tool.client.OCIObjectStorageClient',
+                 return_value=MockOSClient)
+    with TemporaryDirectory() as tmp_dir:
+        with utils.temp_file(tmp_dir, suffix='.sql') as temp_db:
+            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
+
+            # Create a test file
+            with utils.temp_file(tmp_dir) as temp_file:
+                with open(temp_file, 'w') as writer:
+                    writer.write('test content')
+
+                # First backup
+                client.file_backup(temp_file)
+
+                # Manually clear the metadata cache to simulate old database entry
+                file_list = client.file_list()
+                assert len(file_list) == 1
+
+                local_file = client.db_session.query(BackupEntryLocalFile).first()
+                local_file.cached_mtime = None
+                local_file.cached_size = None
+                client.db_session.commit()
+
+                # Verify metadata is None
+                file_list = client.file_list()
+                assert file_list[0]['cached_mtime'] is None
+                assert file_list[0]['cached_size'] is None
+
+                # Second backup - should calculate checksum and populate metadata
+                result = client.file_backup(temp_file)
+                assert result == False  # No new backup needed (MD5 matches)
+
+                # Verify metadata was populated
+                file_list = client.file_list()
+                assert file_list[0]['cached_mtime'] is not None
+                assert file_list[0]['cached_size'] is not None

@@ -1,4 +1,5 @@
 import uuid
+import os
 
 from pathlib import Path
 from sqlalchemy import create_engine
@@ -210,6 +211,46 @@ class BackupClient():
                          f'to output file "{local_output_file}" with md5 {decrypted_md5}')
         return {'original_md5': original_md5, 'decrypted_md5': decrypted_md5}
 
+    def _check_metadata_changed(self, local_file_path, local_backup_file):
+        '''
+        Check if file metadata (mtime, size) has changed
+        Returns True if metadata changed, False if unchanged
+        '''
+        try:
+            stat = os.stat(local_file_path)
+            current_mtime = stat.st_mtime
+            current_size = stat.st_size
+
+            # If we have cached metadata and it matches, file hasn't changed
+            if (local_backup_file.cached_mtime is not None and
+                local_backup_file.cached_size is not None):
+                if (current_mtime == local_backup_file.cached_mtime and
+                    current_size == local_backup_file.cached_size):
+                    self.logger.debug(f'File metadata unchanged (mtime={current_mtime}, size={current_size})')
+                    return False
+                self.logger.debug(f'File metadata changed - cached: (mtime={local_backup_file.cached_mtime}, size={local_backup_file.cached_size}), '
+                                f'current: (mtime={current_mtime}, size={current_size})')
+            else:
+                self.logger.debug('No cached metadata available')
+
+            return True
+        except OSError as e:
+            self.logger.warning(f'Unable to stat file {local_file_path}: {e}')
+            return True
+
+    def _update_metadata_cache(self, local_file_path, local_backup_file):
+        '''
+        Update cached metadata for a file
+        '''
+        try:
+            stat = os.stat(local_file_path)
+            local_backup_file.cached_mtime = stat.st_mtime
+            local_backup_file.cached_size = stat.st_size
+            self.db_session.commit()
+            self.logger.debug(f'Updated metadata cache for {local_backup_file.id} (mtime={stat.st_mtime}, size={stat.st_size})')
+        except OSError as e:
+            self.logger.warning(f'Unable to update metadata cache for {local_file_path}: {e}')
+
     def _check_backup_file_exists(self, local_backup_file, local_file_md5, overwrite):
         '''
         Local backup of file exists
@@ -307,29 +348,61 @@ class BackupClient():
         self.logger.info(f'Updated local backup {local_backup_file.id} to match backup entry {backup_entry.id}')
         return True
 
-    def file_backup(self, local_file, overwrite=False):
+    def file_backup(self, local_file, overwrite=False, force_checksum=False):
         '''
         Backup file to object storage
 
         local_file                  :       Full path of local file
-        overwrite                   :       Upload new file is md5 is changed
-        automatically_upload_files  :       Upload new files automatically
+        overwrite                   :       Upload new file if md5 has changed
+        force_checksum              :       Force MD5 calculation even if metadata unchanged
         '''
         # Use local file as the full path of the file
         # Use local file path as relative path for the database
         local_file_path = Path(local_file).resolve()
         self.logger.info(f'Backing up local file: "{str(local_file_path)}"')
+
+        # Get relative path for database
+        relative_file_path = local_file_path
+        if self.relative_path:
+            relative_file_path = local_file_path.relative_to(self.relative_path)
+
+        # Get or create database entry
+        local_backup_file = self.db_session.query(BackupEntryLocalFile).\
+            filter(BackupEntryLocalFile.local_file_path == str(relative_file_path)).first()
+
+        # For existing entries, check metadata first (unless force_checksum)
+        if local_backup_file and not force_checksum:
+            if not self._check_metadata_changed(local_file_path, local_backup_file):
+                # Metadata unchanged - file likely hasn't changed
+                if local_backup_file.backup_entry_id:
+                    self.logger.info(f'File metadata unchanged, skipping backup for "{str(local_file_path)}"')
+                    return False
+                self.logger.debug('Metadata unchanged but no backup entry exists, calculating checksum')
+
+        # Calculate MD5 (either metadata changed, force_checksum, or no cached metadata)
+        if force_checksum:
+            self.logger.debug('Force checksum enabled, calculating MD5')
         local_file_md5 = utils.md5(local_file_path)
         self.logger.debug(f'Local file "{str(local_file_path)}" has md5 {local_file_md5}')
-        should_upload_file, local_backup_file = self._file_backup_ensure_database_entry(local_file, local_file_md5, overwrite)
+
+        # Now check if we should upload
+        should_upload_file, local_backup_file = self._file_backup_ensure_database_entry(local_file_path, local_file_md5, overwrite)
         if not should_upload_file:
+            # Update metadata cache even if not uploading (md5 matched but metadata changed)
+            self._update_metadata_cache(local_file_path, local_backup_file)
             return False
+
+        # Perform backup
         encryption_data = self._file_backup_encrypt(local_file_path, local_file_md5)
         self._file_backup_upload(encryption_data['encrypted_file'],
                                  encryption_data['encrypted_file_md5'],
                                  encryption_data['local_file_md5'],
                                  local_backup_file)
         Path(encryption_data['encrypted_file']).unlink()
+
+        # Update metadata cache after successful backup
+        self._update_metadata_cache(local_file_path, local_backup_file)
+
         return True
 
     def file_list(self):

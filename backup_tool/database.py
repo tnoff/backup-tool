@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy import Column, ForeignKey, Integer, String, Float
 from sqlalchemy.orm import declarative_base
 
 
@@ -62,3 +62,7 @@ class BackupEntryLocalFile(BASE):
 
     # Local Path
     local_file_path = Column(String(40960), unique=True)
+
+    # Cached metadata for fast change detection
+    cached_mtime = Column(Float, nullable=True)
+    cached_size = Column(Integer, nullable=True)
