@@ -24,38 +24,6 @@ The md5 of the corresponding encrypted file is also calculated and saved in the 
 When uploading the file to object storage, the client passes in the md5 as a header to ensure the object storage client will error if the md5 of the uploaded file does not match the expected value.
 
 
-### Database
-
-
-The database is a simple sqlite file stored locally.
-
-#### Database Migrations
-
-The tool uses Alembic for database schema migrations. When the BackupClient is initialized with a database file, migrations are automatically run to ensure the schema is up to date.
-
-For new installations, the initial schema is created automatically. For existing databases, any pending migrations are applied seamlessly on startup.
-
-To manually run migrations:
-
-```bash
-# Upgrade to latest schema version
-$ alembic upgrade head
-
-# View migration history
-$ alembic history
-
-# Downgrade to previous version (if needed)
-$ alembic downgrade -1
-```
-
-To create a new migration after modifying database models:
-
-```bash
-$ alembic revision --autogenerate -m "Description of changes"
-```
-
-Note: In-memory databases (used for testing) bypass migrations and use direct table creation for performance.
-
 
 ## Install client
 
@@ -99,22 +67,6 @@ key_file=~/.oci/oci_api_key.pem
 ```
 
 
-### Setup Compartments and Buckets
-
-
-Generate compartment for backup data
-
-```
-$ oci iam compartment create -c "${TENANCY_OCID}" --name "backup" --description "Backup data"
-```
-
-Get compartment OCID and create bucket
-
-```
-$ backup=$(oci iam compartment list --all | jq -r '.data | .[] | select(.name=="backup") | .id')
-$ oci os bucket create --name "data" --compartment-id "${backup}"
-```
-
 ## Crypto Key
 
 To encrypt and decrypt file, you'll need a crypto key. The crypto key can be any valid string including letters, numbers, and special characters. The length of the crypto key must be either 16, 24 or 32 bytes long.
@@ -152,6 +104,20 @@ oci:
 
 Path to the sqlite database.
 
+#### Database Migrations
+
+The tool uses Alembic for database schema migrations. Database tables are created automatically when the BackupClient is initialized using `create_all()`, but schema migrations must be run manually when upgrading to a new version that includes database changes.
+
+**For new installations:** The schema is created automatically - no migration needed.
+
+**For existing databases with tables already created:**
+
+If your database was created by an older version (using `create_all()`), you need to "stamp" it with the current migration version before upgrading:
+
+```
+# For future upgrades, run migrations normally
+$ DATABASE_URL="sqlite:////path/to/your/database.db" alembic upgrade head
+```
 
 ### Logging
 
