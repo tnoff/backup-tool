@@ -23,13 +23,17 @@ target_metadata = BASE.metadata
 
 # Support dynamic database URL (can be set via environment variable)
 def get_url():
-    """Get database URL from config or environment"""
-    # Check if URL was set programmatically (for BackupClient integration)
-    url = config.get_main_option("sqlalchemy.url")
+    """Get database URL from environment or config"""
+    # Prioritize environment variable
+    url = os.getenv('DATABASE_URL')
     if url:
         return url
-    # Fallback to environment variable
-    return os.getenv('DATABASE_URL', 'sqlite:///backup_tool.db')
+    # Fallback to config file (if set programmatically)
+    url = config.get_main_option("sqlalchemy.url")
+    if url and url != 'driver://user:pass@localhost/dbname':
+        return url
+    # Final fallback
+    return 'sqlite:///backup_tool.db'
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

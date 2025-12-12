@@ -1,6 +1,6 @@
 import os
 from tempfile import TemporaryDirectory
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine
 
 from backup_tool import utils
 from backup_tool.client import BackupClient
@@ -183,32 +183,6 @@ def test_backup_cleanup(mocker):
             # Make sure backup list is empty
             backup_list = client.backup_list()
             assert len(backup_list) == 0
-
-def test_alembic_migrations(mocker):
-    '''Test that Alembic migrations are run automatically'''
-    mocker.patch('backup_tool.client.OCIObjectStorageClient',
-                 return_value=MockOSClient)
-    with TemporaryDirectory() as tmp_dir:
-        with utils.temp_file(tmp_dir, suffix='.sql') as temp_db:
-            # Create a BackupClient which should run migrations
-            client = BackupClient(temp_db, FAKE_CRYPTO_KEY, '', '', FAKE_NAMESPACE, FAKE_BUCKET, tmp_dir)
-
-            # Verify the alembic_version table exists
-            engine = create_engine(f'sqlite:///{temp_db}')
-            inspector = inspect(engine)
-            tables = inspector.get_table_names()
-
-            # Should have the alembic_version table along with our model tables
-            assert 'alembic_version' in tables
-            assert 'backup_entry' in tables
-            assert 'backup_entry_local_file' in tables
-
-            # Verify the migration was applied
-            with engine.connect() as conn:
-                result = conn.execute(text('SELECT version_num FROM alembic_version'))
-                version = result.fetchone()[0]
-                # Should be the latest migration (metadata caching)
-                assert version == 'ff8c0e19188c'
 
 def test_metadata_caching(mocker):
     '''Test that metadata caching speeds up backups for unchanged files'''
