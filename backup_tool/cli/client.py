@@ -69,7 +69,7 @@ class ClientCLI():
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         if self.cache_file and self.cache_json:
-            self.cache_file.write_text(json.dumps(self.cache_json))
+            self.cache_file.write_text(json.dumps(self.cache_json), 'utf-8')
         temp_dir_path = Path(self.temporary_directory.name)
         for child in temp_dir_path.glob('*'):
             if child.is_file():
@@ -162,7 +162,7 @@ class ClientCLI():
         # Read cached information if its there
         self.cache_file = Path(cache_file).expanduser() if cache_file else self.client.work_directory / 'cache_file.json'
         if self.cache_file.exists():
-            self.cache_json = json.loads(self.cache_file.read_text())
+            self.cache_json = json.loads(self.cache_file.read_text(encoding='utf-8'))
 
         directory_list = []
         for dir_path in dir_paths:
