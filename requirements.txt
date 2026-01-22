@@ -1,6 +1,6 @@
 oci==2.165.1
 pathlib==1.0.1
 pycryptodome==3.23.0
-SQLAlchemy==2.0.45
+SQLAlchemy==2.0.46
 PyYAML==6.0.3
 alembic==1.18.1
