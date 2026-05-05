@@ -3,7 +3,8 @@ import hashlib
 import os
 import struct
 
-from Crypto.Cipher import AES
+# Crypto namespace is provided by pycryptodome, not the deprecated pyCrypto
+from Crypto.Cipher import AES  # nosec B413
 
 # https://eli.thegreenplace.net/2010/06/25/aes-encryption-of-files-in-python-with-pycrypto
 def encrypt_file(input_file, output_file, passphrase, chunksize=64*1024): #pylint:disable=too-many-locals
@@ -19,8 +20,9 @@ def encrypt_file(input_file, output_file, passphrase, chunksize=64*1024): #pylin
     encryptor = AES.new(passphrase.encode('utf-8'), AES.MODE_CBC, iv)
     filesize = os.path.getsize(input_file)
 
-    original_hash_value = hashlib.md5()
-    encrypted_hash_value = hashlib.md5()
+    # MD5 used for file integrity/dedup, not security
+    original_hash_value = hashlib.md5()  # nosec B324
+    encrypted_hash_value = hashlib.md5()  # nosec B324
     with open(input_file, 'rb') as infile:
         with open(output_file, 'wb') as outfile:
             packed_qs = struct.pack('<Q', filesize)
@@ -53,8 +55,9 @@ def decrypt_file(input_file, output_file, passphrase, chunksize=24*1024): #pylin
     passphrase  :   The encryption key - a string that must be either 16, 24 or 32 bytes long
     chunksize   :   Sets the size of the chunk which the function uses to read and decrypt the file
     '''
-    original_hash_value = hashlib.md5()
-    decrypted_hash_value = hashlib.md5()
+    # MD5 used for file integrity/dedup, not security
+    original_hash_value = hashlib.md5()  # nosec B324
+    decrypted_hash_value = hashlib.md5()  # nosec B324
     with open(input_file, 'rb') as infile:
         read_input = infile.read(struct.calcsize('Q'))
         original_hash_value.update(read_input)

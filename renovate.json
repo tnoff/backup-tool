@@ -1,0 +1,19 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "enabledManagers": ["gitlabci", "gitlabci-include", "pep621"],
+  "rebaseWhen": "behind-base-branch",
+  "packageRules": [
+    {
+      "matchPackageNames": ["pytest", "pytest-cov", "pytest-mock", "mock", "tox", "pylint", "bandit"],
+      "additionalBranchPrefix": "test-",
+      "automerge": true
+    },
+    {
+      "matchPackageNames": ["!pytest", "!pytest-cov", "!pytest-mock", "!mock", "!tox", "!pylint", "!bandit"],
+      "additionalBranchPrefix": "dev-"
+    }
+  ]
+}

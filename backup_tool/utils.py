@@ -3,7 +3,7 @@ from contextlib import contextmanager
 import hashlib
 import logging
 from logging.handlers import RotatingFileHandler
-import random
+import secrets
 import string
 
 from pathlib import Path
@@ -17,7 +17,7 @@ def random_string(length=32, prefix='', suffix=''):
     suffix  :   Suffix to place after random characters
     '''
     chars = string.ascii_lowercase + string.digits
-    generated = "".join(random.choice(chars) for _ in range(length - len(prefix) - len(suffix)))
+    generated = "".join(secrets.choice(chars) for _ in range(length - len(prefix) - len(suffix)))
     return f'{prefix}{generated}{suffix}'
 
 @contextmanager
@@ -51,7 +51,8 @@ def md5(input_file, chunksize=64*1024):
     '''
     Get md5 base64 hash of input file
     '''
-    hash_value = hashlib.md5()
+    # MD5 used for file integrity/dedup, not security
+    hash_value = hashlib.md5()  # nosec B324
     with open(input_file, 'rb') as read:
         while True:
             chunk = read.read(chunksize)
