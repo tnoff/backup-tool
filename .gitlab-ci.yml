@@ -52,6 +52,8 @@ trufflehog:
 
 tox-generate:
   extends: .tox-generate
+  variables:
+    TOX_BASE_IMAGE: '${CI_BASE_IMAGE_PATH}:$${PYTHON_VERSION}'
 
 tox-pipeline:
   extends: .tox-pipeline
