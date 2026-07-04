@@ -15,7 +15,7 @@ dynamic = ["version"]
 dependencies = [
     "oci==2.181.0",
     "pycryptodome==3.23.0",
-    "SQLAlchemy==2.0.50",
+    "SQLAlchemy==2.0.51",
     "PyYAML==6.0.3",
     "alembic==1.18.5",
 ]
