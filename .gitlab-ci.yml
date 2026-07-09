@@ -1,27 +1,27 @@
 include:
   - project: 'tnoff-projects/github-workflows'
-    ref: efe31bf2562d945b344d7bcac48433ef70c80a83
+    ref: 616a6485da3e2bc493ea25db2449378a5b1666fc
     file: '/gitlab/tag.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: efe31bf2562d945b344d7bcac48433ef70c80a83
+    ref: 616a6485da3e2bc493ea25db2449378a5b1666fc
     file: '/gitlab/discord-notify.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: efe31bf2562d945b344d7bcac48433ef70c80a83
+    ref: 616a6485da3e2bc493ea25db2449378a5b1666fc
     file: '/gitlab/renovate.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: efe31bf2562d945b344d7bcac48433ef70c80a83
+    ref: 616a6485da3e2bc493ea25db2449378a5b1666fc
     file: '/gitlab/branch-cleanup.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: efe31bf2562d945b344d7bcac48433ef70c80a83
+    ref: 616a6485da3e2bc493ea25db2449378a5b1666fc
     file: '/gitlab/bump-version.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: efe31bf2562d945b344d7bcac48433ef70c80a83
+    ref: 616a6485da3e2bc493ea25db2449378a5b1666fc
     file: '/gitlab/trufflehog.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: efe31bf2562d945b344d7bcac48433ef70c80a83
+    ref: 616a6485da3e2bc493ea25db2449378a5b1666fc
     file: '/gitlab/release.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: efe31bf2562d945b344d7bcac48433ef70c80a83
+    ref: 616a6485da3e2bc493ea25db2449378a5b1666fc
     file: '/gitlab/tox-pipeline.yml'
 
 stages:
