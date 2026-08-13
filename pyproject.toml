@@ -17,7 +17,7 @@ dependencies = [
     "pycryptodome==3.23.0",
     "SQLAlchemy==2.0.52",
     "PyYAML==6.0.3",
-    "alembic==1.19.0",
+    "alembic==1.19.1",
 ]
 
 [project.optional-dependencies]
