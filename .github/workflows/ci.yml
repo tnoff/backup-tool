@@ -1,0 +1,59 @@
+name: CI
+
+# Pull-request checks, ported from .gitlab-ci.yml's pr-check and test stages.
+# Shared jobs come from tnoff/github-workflows, SHA-pinned the same way the
+# GitLab `include:` refs were; Renovate's github-actions manager keeps the pins
+# current.
+
+on:
+  pull_request:
+
+# One in-flight run per PR. Renovate force-pushes on rebase
+# (rebaseWhen: behind-base-branch), and without this every rebase leaves its
+# predecessor running to completion.
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Scan for secrets
+    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@370df8eb59c656d05358d6be7799d7355f6d750e
+
+  # extra_apt is deliberately empty. The GitLab job ran on ci-base-images,
+  # advertised as "git + build tooling", but that was the fleet-wide Python
+  # base rather than this repo's requirement -- oci, pycryptodome, SQLAlchemy,
+  # alembic and PyYAML all ship manylinux wheels, and the SQLAlchemy tests hit
+  # sqlite through the stdlib `sqlite3` module, not the sqlite3 CLI. Confirmed
+  # by grep: nothing under tests/ or backup_tool/ shells out to a binary.
+  tox:
+    name: Tox
+    uses: tnoff/github-workflows/.github/workflows/tox.yml@370df8eb59c656d05358d6be7799d7355f6d750e
+
+  bump-version:
+    name: Bump version
+    # Matches the GitLab rule. The dev- prefix comes from the shared renovate
+    # python preset and is load-bearing: it is what decides whether an update
+    # bumps VERSION, writes a changelog fragment, and therefore cuts a release.
+    if: startsWith(github.head_ref, 'renovate/dev-')
+    permissions:
+      contents: write
+    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@370df8eb59c656d05358d6be7799d7355f6d750e
+    with:
+      bump_changelog: true
+    secrets:
+      git_push_token: ${{ secrets.GIT_PUSH_TOKEN }}
+
+  auto-approve:
+    name: Auto-approve
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: tnoff/github-workflows/.github/workflows/renovate-auto-approve.yml@370df8eb59c656d05358d6be7799d7355f6d750e
+    with:
+      branch_pattern: '^renovate/'
+    secrets:
+      approval_token: ${{ secrets.APPROVAL_TOKEN }}
