@@ -21,7 +21,7 @@ permissions:
 jobs:
   secrets:
     name: Scan for secrets
-    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@8570bac7529b60e79b4fc6c837027d2f65fc0c9f
+    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@5dca8145085b355530ca629398369aa4a0219250
 
   # extra_apt is deliberately empty. The GitLab job ran on ci-base-images,
   # advertised as "git + build tooling", but that was the fleet-wide Python
@@ -31,7 +31,7 @@ jobs:
   # by grep: nothing under tests/ or backup_tool/ shells out to a binary.
   tox:
     name: Tox
-    uses: tnoff/github-workflows/.github/workflows/tox.yml@8570bac7529b60e79b4fc6c837027d2f65fc0c9f
+    uses: tnoff/github-workflows/.github/workflows/tox.yml@5dca8145085b355530ca629398369aa4a0219250
 
   bump-version:
     name: Bump version
@@ -41,7 +41,7 @@ jobs:
     if: startsWith(github.head_ref, 'renovate/dev-')
     permissions:
       contents: write
-    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@8570bac7529b60e79b4fc6c837027d2f65fc0c9f
+    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@5dca8145085b355530ca629398369aa4a0219250
     with:
       bump_changelog: true
     secrets:
