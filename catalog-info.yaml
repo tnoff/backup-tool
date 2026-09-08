@@ -18,6 +18,6 @@ metadata:
     the plaintext and the ciphertext so a restore can be verified. Pip-installable CLI,
     run on demand rather than deployed.
 spec:
-  type: tool
+  type: library
   owner: group:default/admin
   lifecycle: production
