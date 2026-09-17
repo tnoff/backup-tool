@@ -69,7 +69,7 @@ jobs:
     name: Scan for secrets
     needs: metadata
     if: needs.metadata.outputs.only != 'true'
-    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@0d92c3c09cf7dd78ce36cb5f40618e7fc296e6a2
+    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@a56f0254df895235b90c5246e8eec462713112fd
 
   # extra_apt is deliberately empty. The GitLab job ran on ci-base-images,
   # advertised as "git + build tooling", but that was the fleet-wide Python
@@ -81,7 +81,7 @@ jobs:
     name: Tox
     needs: metadata
     if: needs.metadata.outputs.only != 'true'
-    uses: tnoff/github-workflows/.github/workflows/tox.yml@0d92c3c09cf7dd78ce36cb5f40618e7fc296e6a2
+    uses: tnoff/github-workflows/.github/workflows/tox.yml@a56f0254df895235b90c5246e8eec462713112fd
 
   bump-version:
     name: Bump version
@@ -91,7 +91,7 @@ jobs:
     if: startsWith(github.head_ref, 'renovate/dev-')
     permissions:
       contents: write
-    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@0d92c3c09cf7dd78ce36cb5f40618e7fc296e6a2
+    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@a56f0254df895235b90c5246e8eec462713112fd
     with:
       bump_changelog: true
     secrets:
@@ -107,7 +107,7 @@ jobs:
     name: Workflow contracts
     needs: metadata
     if: needs.metadata.outputs.only != 'true'
-    uses: tnoff/github-workflows/.github/workflows/check-workflow-contracts.yml@0d92c3c09cf7dd78ce36cb5f40618e7fc296e6a2
+    uses: tnoff/github-workflows/.github/workflows/check-workflow-contracts.yml@a56f0254df895235b90c5246e8eec462713112fd
 
   result:
     name: CI result
