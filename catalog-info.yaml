@@ -20,4 +20,7 @@ metadata:
 spec:
   type: library
   owner: group:default/admin
-  lifecycle: production
+  # Deprecated 2026-09-24: no longer in active use, repo archived on GitHub.
+  # Kept registered (rather than removed from the catalog) so it still shows
+  # up as deprecated instead of just vanishing from the portal.
+  lifecycle: deprecated
