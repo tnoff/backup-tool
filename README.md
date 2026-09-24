@@ -1,5 +1,8 @@
 # Backup Tool
 
+> **Deprecated (2026-09-24):** no longer in active use and archived on GitHub.
+> The code and this documentation are left as-is for reference; there are no
+> further releases or fixes planned.
 
 Encrypt and backup local files to Oracle Cloud Infrastructure (OCI) Object Storage.
 
